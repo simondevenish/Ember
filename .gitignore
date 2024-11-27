@@ -1,0 +1,48 @@
+# Build artifacts
+build/
+*.o
+*.out
+*.exe
+
+# Compiled binary
+*.bin
+*.elf
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*.bak
+*.dSYM/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE files
+*.code-workspace
+*.vscode/
+*.idea/
+*.suo
+*.ncb
+*.user
+*.layout
+*.pidb
+*.opendb
+*.VC.db
+*.swp
+__pycache__/
+
+# Backup files
+*~
+*.orig
+
+# Generated files
+tags
+TAGS
+
+# Default scripts or sample scripts
+scripts/*.ember
+
+# Exclude specific Makefile targets
+Makefile~

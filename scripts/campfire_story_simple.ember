@@ -1,0 +1,42 @@
+// campfire_story_simple.ember
+// Simplified campfire_story.ember
+
+// Variable declarations and initializations
+var playerName = "Traveler";
+var location = "Whispering Woods";
+var campfireLit = false;
+
+// Function to introduce the player
+function introducePlayer(name, place) {
+    print("Welcome, " + name + ", to the " + place + "!");
+}
+
+// Function to light the campfire
+function lightCampfire() {
+    if (campfireLit == false) {
+        campfireLit = true;
+        print("You light the campfire. The warm glow illuminates the surroundings.");
+    } else {
+        print("The campfire is already lit.");
+    }
+}
+
+// Function to tell a story
+function tellStory() {
+    if (campfireLit == true) {
+        print("As the embers crackle, you share tales of adventure.");
+        // Without arrays, we can't iterate over companions
+        print("You share a memorable story.");
+    } else {
+        print("It's too dark to share stories. Perhaps light the campfire first?");
+    }
+}
+
+// Main script execution
+introducePlayer(playerName, location);
+
+print("Night falls, and it's getting chilly.");
+
+lightCampfire();
+
+tellStory();

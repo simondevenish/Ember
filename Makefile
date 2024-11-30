@@ -9,27 +9,22 @@ SRC = src
 BUILD_DIR = build
 
 # Source files
-SRCS = $(wildcard $(SRC)/*.c) main.c
+SRCS = $(wildcard $(SRC)/*.c)
 OBJS = $(patsubst %.c, $(BUILD_DIR)/%.o, $(notdir $(SRCS)))
 
-# Target binary
-TARGET = $(BUILD_DIR)/emberscript
+# Target library
+LIBRARY = $(BUILD_DIR)/libemberscript.a
 
 # Default build rule
-all: $(TARGET)
+all: $(LIBRARY)
 
-# Rule to create the target binary
-$(TARGET): $(OBJS)
+# Rule to create the static library
+$(LIBRARY): $(OBJS)
 	@mkdir -p $(BUILD_DIR)
-	$(CC) -o $@ $(OBJS)
+	ar rcs $@ $(OBJS)
 
 # Rule to build object files from source files
 $(BUILD_DIR)/%.o: $(SRC)/%.c
-	@mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# Rule to build the main.o file
-$(BUILD_DIR)/main.o: main.c
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -37,8 +32,4 @@ $(BUILD_DIR)/main.o: main.c
 clean:
 	rm -rf $(BUILD_DIR)
 
-# Run the interpreter with a script
-run: $(TARGET)
-	./$(TARGET) scripts/adventure_game.ember
-
-.PHONY: all clean run
+.PHONY: all clean

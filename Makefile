@@ -13,7 +13,7 @@ SRCS = $(wildcard $(SRC)/*.c)
 OBJS = $(patsubst %.c, $(BUILD_DIR)/%.o, $(notdir $(SRCS)))
 
 # Target library
-LIBRARY = $(BUILD_DIR)/libemberscript.a
+LIBRARY = $(BUILD_DIR)/libEmberScript.a
 
 # Default build rule
 all: $(LIBRARY)

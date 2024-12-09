@@ -4,8 +4,13 @@
 #include <stdlib.h>     // For memory allocation (e.g., malloc, free)
 #include <string.h>     // For string manipulation (e.g., strcpy, strcmp)
 #include <stdbool.h>    // For boolean data type
-#include <pthread.h>    // For threading, if implementing runtime threading functions
-#include <ctype.h>
+#ifdef _WIN32
+ #include <windows.h>
+ // Define pthread_t as a HANDLE on Windows
+typedef HANDLE pthread_t;
+#else
+#include <pthread.h>    // Only include pthread.h if not on Windows
+#endif#include <ctype.h>
  #include <math.h>
 
 Environment* runtime_create_environment() {

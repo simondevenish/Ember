@@ -7,7 +7,7 @@
 
 EmberScript is a lightweight, extensible, and highly portable scripting language designed for embedding in games and applications. Written entirely in pure C, EmberScript offers high performance and minimal overhead, making it ideal for resource-constrained environments. Combining simplicity and flexibility, EmberScript is perfect for defining game logic, creating in-game events, and scripting interactive behaviors.
 
-The long-term vision for EmberScript is to evolve into a powerful, game-focused scripting language that blends the best features from other popular languages like Lua, AngelScript, and Haxe. By incorporating features such as lightweight coroutines, strong typing, flexible table structures, and cross-platform compilation, EmberScript aims to deliver the perfect balance between usability and power.
+The long-term vision for EmberScript is to evolve into a powerful, game-focused scripting language that blends the best features from other popular languages like Lua, AngelScript, and Haxe. By incorporating features such as lightweight coroutines, strong typing and flexible table structures, EmberScript aims to deliver the perfect balance between usability and power.
 
 ## Features
 - **Dynamic Typing:** EmberScript provides the flexibility of dynamic typing, making it ideal for rapid prototyping and game logic.
@@ -100,7 +100,6 @@ We welcome contributions to EmberScript! If you'd like to contribute:
   - [ ] Event-based architecture
 
 - **Haxe-Inspired Features**:
-  - [ ] Cross-platform compilation to target languages (JavaScript, Lua, etc.)
   - [ ] Macros and compile-time meta-programming
   - [ ] Pattern matching for cleaner conditional logic
   - [ ] Null safety to reduce runtime errors

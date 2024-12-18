@@ -10,8 +10,9 @@
 typedef HANDLE pthread_t;
 #else
 #include <pthread.h>    // Only include pthread.h if not on Windows
-#endif#include <ctype.h>
- #include <math.h>
+#endif
+#include <ctype.h>
+#include <math.h>
 
 Environment* runtime_create_environment() {
     // Allocate memory for the environment

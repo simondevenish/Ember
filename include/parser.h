@@ -27,7 +27,7 @@ typedef struct ASTNode {
     int line;   // Line number where this node appears
     int column; // Column number where this node appears
     union {
-        struct { TokenType token_type; char* value; } literal; // Literal values (e.g., numbers, strings)
+        struct { ScriptTokenType token_type; char* value; } literal; // Literal values (e.g., numbers, strings)
         struct { struct ASTNode* operand; char* op_symbol; } unary_op;  // Unary operation (e.g., -x, !x)
         struct { struct ASTNode* left; struct ASTNode* right; char* op_symbol; } binary_op; // Binary operation (e.g., x + y)
         struct { char* variable; struct ASTNode* value; } assignment; // Assignment (e.g., x = y)
@@ -209,7 +209,7 @@ void parser_recover(Parser* parser);
  * @return true If the current token matches.
  * @return false Otherwise.
  */
-bool match_token(Parser* parser, TokenType type, const char* value);
+bool match_token(Parser* parser, ScriptTokenType type, const char* value);
 
 /**
  * @brief Generate a parser error with a custom message.

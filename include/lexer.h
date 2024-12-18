@@ -15,11 +15,11 @@ typedef enum {
     TOKEN_NULL,        // Null value (e.g., null or nil)
     TOKEN_EOF,         // End of file/input
     TOKEN_ERROR        // Error token type
-} TokenType;
+} ScriptTokenType;
 
 // Token structure
 typedef struct {
-    TokenType type;  // Type of the token
+    ScriptTokenType type;  // Type of the token
     char* value;     // Value of the token (e.g., "42", "+")
     int line;        // Line number of the token
     int column;      // Column number of the token
@@ -76,7 +76,7 @@ char lexer_peek(Lexer* lexer);
  */
 Token lexer_next_token(Lexer* lexer);
 
-void add_token(Lexer* lexer, TokenType type, const char* value);
+void add_token(Lexer* lexer, ScriptTokenType type, const char* value);
 /**
  * @brief Checks if a string is a keyword.
  * 

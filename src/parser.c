@@ -1277,7 +1277,7 @@ void parser_recover(Parser* parser) {
     }
 }
 
-bool match_token(Parser* parser, TokenType type, const char* value) {
+bool match_token(Parser* parser, ScriptTokenType type, const char* value) {
     // Check if the current token matches the expected type
     if (parser->current_token.type != type) {
         return false;

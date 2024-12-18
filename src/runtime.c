@@ -4,8 +4,13 @@
 #include <stdlib.h>     // For memory allocation (e.g., malloc, free)
 #include <string.h>     // For string manipulation (e.g., strcpy, strcmp)
 #include <stdbool.h>    // For boolean data type
-#include <pthread.h>    // For threading, if implementing runtime threading functions
-#include <ctype.h>
+#ifdef _WIN32
+ #include <windows.h>
+ // Define pthread_t as a HANDLE on Windows
+typedef HANDLE pthread_t;
+#else
+#include <pthread.h>    // Only include pthread.h if not on Windows
+#endif#include <ctype.h>
  #include <math.h>
 
 Environment* runtime_create_environment() {
@@ -425,21 +430,34 @@ void runtime_execute_block(Environment* env, ASTNode* block) {
 RuntimeValue runtime_execute_function_call(Environment* env, ASTNode* function_call) {
     const char* function_name = function_call->function_call.function_name;
 
-    // Retrieve the function from the environment
+   // Retrieve the function from the environment
     RuntimeValue* function_value = runtime_get_variable(env, function_name);
     if (function_value && function_value->type == RUNTIME_VALUE_FUNCTION) {
         if (function_value->function_value.function_type == FUNCTION_TYPE_BUILTIN) {
             // Built-in function
             BuiltinFunction builtin_function = function_value->function_value.builtin_function;
-            RuntimeValue args[function_call->function_call.argument_count];
+            
+            int arg_count = function_call->function_call.argument_count;
+            RuntimeValue* args = (RuntimeValue*)malloc(arg_count * sizeof(RuntimeValue));
+            if (!args) {
+                fprintf(stderr, "Error: Memory allocation failed for function arguments.\n");
+                RuntimeValue result = { .type = RUNTIME_VALUE_NULL };
+                return result;
+            }
 
             // Evaluate arguments
-            for (int i = 0; i < function_call->function_call.argument_count; i++) {
+            for (int i = 0; i < arg_count; i++) {
                 args[i] = runtime_evaluate(env, function_call->function_call.arguments[i]);
             }
 
             // Execute the built-in function
-            return builtin_function(env, args, function_call->function_call.argument_count);
+            RuntimeValue result = builtin_function(env, args, arg_count);
+
+            // Free the allocated memory
+            free(args);
+
+            return result;
+
         } else if (function_value->function_value.function_type == FUNCTION_TYPE_USER) {
             // User-defined function
             UserDefinedFunction* user_function = function_value->function_value.user_function;
@@ -473,7 +491,7 @@ RuntimeValue runtime_execute_function_call(Environment* env, ASTNode* function_c
         RuntimeValue result = { .type = RUNTIME_VALUE_NULL };
         return result;
     }
-    
+
     RuntimeValue result;
     result.type = RUNTIME_VALUE_NULL;
     return result;

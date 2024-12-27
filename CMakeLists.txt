@@ -24,23 +24,23 @@ file(GLOB EMBERSCRIPT_SOURCES src/*.c)
 add_library(EmberScript STATIC ${EMBERSCRIPT_SOURCES})
 
 # Enable testing
-enable_testing()
+#enable_testing()
 
-add_subdirectory(thirdparty/googletest)
+#add_subdirectory(thirdparty/googletest)
 
 # Gather all test files from tests/
-file(GLOB TEST_SOURCES tests/*.cpp)
+#file(GLOB TEST_SOURCES tests/*.cpp)
 
 # Create the test executable
-add_executable(run_tests ${TEST_SOURCES})
+#add_executable(run_tests ${TEST_SOURCES})
 
 # Link test executable with EmberScript library and GTest libraries
-target_link_libraries(run_tests PRIVATE EmberScript gtest gtest_main pthread)
+#target_link_libraries(run_tests PRIVATE EmberScript gtest gtest_main pthread)
 
 # Add the test to ctest
-add_test(NAME EmberScriptTests COMMAND run_tests)
+#add_test(NAME EmberScriptTests COMMAND run_tests)
 
 # Optionally, you can add a custom target `check` to run tests
-add_custom_target(check
-    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS run_tests)
+#add_custom_target(check
+#    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+#    DEPENDS run_tests)

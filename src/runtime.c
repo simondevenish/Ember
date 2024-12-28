@@ -354,6 +354,70 @@ RuntimeValue runtime_evaluate(Environment* env, ASTNode* node) {
             }
             break;
         }
+        case AST_ARRAY_LITERAL: {
+            // We have an array literal: we want to create a RUNTIME_VALUE_ARRAY
+            // with elements.
+            int count = node->array_literal.element_count;
+
+            // Allocate a new array to store the evaluated elements
+            RuntimeValue* elementValues = malloc(sizeof(RuntimeValue) * count);
+            if (!elementValues) {
+                fprintf(stderr, "Error: Memory allocation failed for array literal\n");
+                break;
+            }
+
+            // Evaluate each child expression
+            for (int i = 0; i < count; i++) {
+                ASTNode* elemNode = node->array_literal.elements[i];
+                elementValues[i] = runtime_evaluate(env, elemNode);
+                // You may or may not want to do further checks here
+            }
+
+            // Populate the result as an array
+            result.type = RUNTIME_VALUE_ARRAY;
+            result.array_value.elements = elementValues;
+            result.array_value.count    = count;
+            break;
+        }
+        case AST_INDEX_ACCESS: {
+            // Evaluate the array object
+            RuntimeValue arrayVal = runtime_evaluate(env, node->index_access.array_expr);
+
+            // Evaluate the index expression
+            RuntimeValue indexVal = runtime_evaluate(env, node->index_access.index_expr);
+
+            // Check that arrayVal is actually an array
+            if (arrayVal.type != RUNTIME_VALUE_ARRAY) {
+                fprintf(stderr, "Error: Attempted indexing on non-array type.\n");
+                result.type = RUNTIME_VALUE_NULL;
+                break;
+            }
+
+            // Check that indexVal is a number
+            if (indexVal.type != RUNTIME_VALUE_NUMBER) {
+                fprintf(stderr, "Error: Array index must be numeric.\n");
+                result.type = RUNTIME_VALUE_NULL;
+                break;
+            }
+
+            // Convert the index to an integer
+            int idx = (int)indexVal.number_value;
+            if (idx < 0 || idx >= arrayVal.array_value.count) {
+                fprintf(stderr, "Error: Array index %d out of bounds.\n", idx);
+                result.type = RUNTIME_VALUE_NULL;
+                break;
+            }
+
+            // The array's elements are stored in arrayVal.array_value.elements
+            // so we retrieve the element at idx
+            RuntimeValue element = arrayVal.array_value.elements[idx];
+
+            // We typically *copy* the element if your language semantics treat them as distinct
+            // For a shallow approach, you might do:
+            result = runtime_value_copy(&element);
+
+            break;
+        }
         case AST_IF_STATEMENT: {
             RuntimeValue condition = runtime_evaluate(env, node->if_statement.condition);
             if (condition.type == RUNTIME_VALUE_BOOLEAN && condition.boolean_value) {

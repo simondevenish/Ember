@@ -18,7 +18,9 @@ typedef enum {
     AST_SWITCH_CASE,     // Switch/case statement
     AST_LOGICAL_OP,
     AST_BLOCK,
-    AST_FUNCTION_DEF
+    AST_FUNCTION_DEF,
+    AST_ARRAY_LITERAL,
+    AST_INDEX_ACCESS
 } ASTNodeType;
 
 // AST Node Structure
@@ -42,6 +44,8 @@ typedef struct ASTNode {
         struct { char* function_name; char** parameters; int parameter_count; struct ASTNode* body; } function_def; // Function definition
         struct { struct ASTNode* left; struct ASTNode* right; char* op_symbol; } logical_op; // Logical operation (e.g., &&, ||)
         struct { char* variable_name; } variable; // For AST_VARIABLE
+        struct { struct ASTNode** elements; int element_count; } array_literal; // For AST_ARRAY_LITERAL
+         struct { struct ASTNode* array_expr; struct ASTNode* index_expr; } index_access; // For AST_INDEX_ACCESS
     };
 } ASTNode;
 

@@ -218,6 +218,8 @@ ASTNode* parse_script(Parser* parser) {
 }
 
 ASTNode* parse_factor(Parser* parser) {
+    ASTNode* factor_node = NULL;
+
     // Handle unary operators (e.g., -x, !x)
     if (parser->current_token.type == TOKEN_OPERATOR &&
         (strcmp(parser->current_token.value, "-") == 0 ||
@@ -252,11 +254,10 @@ ASTNode* parse_factor(Parser* parser) {
         unary_op->unary_op.op_symbol = operator;
         unary_op->unary_op.operand = operand;
 
-        return unary_op;
+        factor_node = unary_op;
     }
-
     // Handle literals (numbers, strings, booleans, null)
-    if (parser->current_token.type == TOKEN_NUMBER ||
+    else if (parser->current_token.type == TOKEN_NUMBER ||
         parser->current_token.type == TOKEN_STRING ||
         parser->current_token.type == TOKEN_BOOLEAN ||
         parser->current_token.type == TOKEN_NULL) {
@@ -279,12 +280,10 @@ ASTNode* parse_factor(Parser* parser) {
 
         // Advance past the literal
         parser_advance(parser);
-
-        return literal;
+        factor_node = literal;
     }
-
     // Handle parentheses for sub-expressions
-    if (parser->current_token.type == TOKEN_PUNCTUATION &&
+    else if (parser->current_token.type == TOKEN_PUNCTUATION &&
         strcmp(parser->current_token.value, "(") == 0) {
         // Advance past the opening parenthesis
         parser_advance(parser);
@@ -306,12 +305,79 @@ ASTNode* parse_factor(Parser* parser) {
 
         // Advance past the closing parenthesis
         parser_advance(parser);
-
-        return expr;
+        factor_node = expr;
     }
+    // Check for array literal: '['
+    else if (parser->current_token.type == TOKEN_PUNCTUATION &&
+        strcmp(parser->current_token.value, "[") == 0)
+    {
+        // Advance past '['
+        parser_advance(parser);
 
+        // Create the array literal node
+        ASTNode* array_node = create_ast_node(AST_ARRAY_LITERAL);
+        if (!array_node) {
+            report_error(parser, "Failed to allocate AST_ARRAY_LITERAL node");
+            return NULL;
+        }
+
+        // Prepare storage for elements
+        array_node->array_literal.elements = NULL;
+        array_node->array_literal.element_count = 0;
+
+        // We might parse zero or more expressions, separated by commas, until we see ']'
+        while (parser->current_token.type != TOKEN_PUNCTUATION ||
+               strcmp(parser->current_token.value, "]") != 0)
+        {
+            // Parse an expression for each array element
+            ASTNode* element = parse_expression(parser, 0);
+            if (!element) {
+                free_ast(array_node);
+                return NULL;
+            }
+
+            // Grow the elements array by 1
+            array_node->array_literal.element_count++;
+            array_node->array_literal.elements = realloc(
+                array_node->array_literal.elements,
+                sizeof(ASTNode*) * array_node->array_literal.element_count
+            );
+            if (!array_node->array_literal.elements) {
+                report_error(parser, "Memory allocation failed while parsing array elements");
+                free_ast(element);
+                free_ast(array_node);
+                return NULL;
+            }
+            // Store the parsed element
+            array_node->array_literal.elements[array_node->array_literal.element_count - 1] = element;
+
+            // If the next token is a comma, consume it and continue
+            if (parser->current_token.type == TOKEN_PUNCTUATION &&
+                strcmp(parser->current_token.value, ",") == 0)
+            {
+                parser_advance(parser); // skip the comma
+            }
+            else {
+                // Otherwise, break if we don't see a comma
+                break;
+            }
+        }
+
+        // Expect a closing bracket ']'
+        if (parser->current_token.type != TOKEN_PUNCTUATION ||
+            strcmp(parser->current_token.value, "]") != 0)
+        {
+            report_error(parser, "Expected ']' at the end of array literal");
+            free_ast(array_node);
+            return NULL;
+        }
+
+        // Consume the ']'
+        parser_advance(parser);
+        factor_node = array_node;
+    }
     // Handle identifiers (variables and function calls)
-    if (parser->current_token.type == TOKEN_IDENTIFIER) {
+    else if (parser->current_token.type == TOKEN_IDENTIFIER) {
         char* identifier = strdup(parser->current_token.value);
         if (!identifier) {
             report_error(parser, "Memory allocation failed for identifier");
@@ -394,7 +460,8 @@ ASTNode* parse_factor(Parser* parser) {
             func_call->function_call.function_name = identifier;
             func_call->function_call.arguments = arguments;
             func_call->function_call.argument_count = argument_count;
-            return func_call;
+
+            factor_node = func_call;
         } else {
             // Variable reference
             ASTNode* var_node = create_ast_node(AST_VARIABLE);
@@ -404,13 +471,58 @@ ASTNode* parse_factor(Parser* parser) {
                 return NULL;
             }
             var_node->variable.variable_name = identifier;
-            return var_node;
+            factor_node = var_node;
         }
+    } else {
+        // If none of the above, return NULL (syntax error)
+        report_error(parser, "Unexpected token");
+        return NULL;
     }
 
-    // If none of the above, return NULL (syntax error)
-    report_error(parser, "Unexpected token");
-    return NULL;
+     while (parser->current_token.type == TOKEN_PUNCTUATION &&
+           strcmp(parser->current_token.value, "[") == 0)
+    {
+        // We have an index access, e.g. "myArray[ indexExpr ]"
+        parser_advance(parser); // skip '['
+
+        // parse the expression inside [ ... ]
+        ASTNode* index_expr = parse_expression(parser, 0);
+        if (!index_expr) {
+            free_ast(factor_node);
+            return NULL;
+        }
+
+        // Expect a closing bracket ']'
+        if (parser->current_token.type != TOKEN_PUNCTUATION ||
+            strcmp(parser->current_token.value, "]") != 0)
+        {
+            report_error(parser, "Expected ']' after array index expression");
+            free_ast(factor_node);
+            free_ast(index_expr);
+            return NULL;
+        }
+        parser_advance(parser); // skip ']'
+
+        // Build an AST_INDEX_ACCESS node
+        ASTNode* index_node = create_ast_node(AST_INDEX_ACCESS);  // <-- you must define AST_INDEX_ACCESS
+        if (!index_node) {
+            report_error(parser, "Memory allocation failed for AST_INDEX_ACCESS");
+            free_ast(factor_node);
+            free_ast(index_expr);
+            return NULL;
+        }
+
+        // store "myArray" in array_expr, "indexExpr" in index_expr
+        index_node->index_access.array_expr = factor_node;
+        index_node->index_access.index_expr = index_expr;
+
+        // Now this index_node becomes the new 'factor_node',
+        // in case there is another bracket: items[0][1]
+        factor_node = index_node;
+    }
+
+    // Finally, return the constructed factor_node
+    return factor_node;
 }
 
 ASTNode* parse_expression(Parser* parser, int min_precedence) {

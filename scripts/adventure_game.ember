@@ -6,6 +6,11 @@ var health = 50;
 var gold = 0;
 var inventory = "Sword";
 var isAlive = true;
+var items = ["Lantern", "Map", "Journal"];
+
+var lantern = items[0];
+
+print("item 1 is " + lantern);
 
 // Function to display player stats
 function displayStats(name, hp, gp, items) {
@@ -41,6 +46,8 @@ function battle(enemy, damage) {
 displayStats(playerName, health, gold, inventory);
 
 print("You embark on an adventure!");
+
+//print("Your current inventory includes: " + listItems(inventory) + ".");
 
 battle("Goblin", 50);
 

@@ -79,10 +79,9 @@ heal(25);
 
 displayStats(playerName, health, gold, inventory);
 
-// For loop is broken
-//for (var i = 0; i < 3; i = i + 1) {
- //   print("Step " + i + " of your journey.");
-//}
+for (var i = 0; i < 3; i = i + 1) {
+    print("Step " + i + " of your journey.");
+}
 
 // End of script
 print("The adventure ends.");

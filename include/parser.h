@@ -178,12 +178,14 @@ ASTNode* parse_switch_case(Parser* parser);
 ASTNode* parse_assignment(Parser* parser);
 
 /**
- * @brief Parse a variable declaration (e.g., int x = 5;).
- * 
+ * @brief Parse a variable declaration (e.g., var x = 5).
+ *        Optionally skip trailing semicolon if in a for-loop header.
+ *
  * @param parser The parser instance.
+ * @param inForHeader If true, do NOT consume a trailing semicolon.
  * @return ASTNode* The parsed variable declaration node.
  */
-ASTNode* parse_variable_declaration(Parser* parser);
+ASTNode* parse_variable_declaration(Parser* parser, bool inForHeader);
 
 /**
  * @brief Parse an anonymous block (e.g., a block of statements not tied to any specific construct).

@@ -414,49 +414,124 @@ ASTNode* parse_factor(Parser* parser) {
 }
 
 ASTNode* parse_expression(Parser* parser, int min_precedence) {
+    // 1. Parse the initial left-hand side (factor)
     ASTNode* left = parse_factor(parser);
     if (!left) {
         fprintf(stderr, "Error: Failed to parse left-hand side of expression\n");
         return NULL;
     }
 
-    while (parser->current_token.type == TOKEN_OPERATOR) {
-        char* op = parser->current_token.value;
-        int precedence = get_operator_precedence(op);
-        if (precedence < min_precedence) {
+    // 2. Loop to handle multiple operators in sequence
+    //    (e.g., left + right + right2, etc.)
+    while (true) {
+        // --- A) Check for assignment operator first (lowest precedence) ---
+        // If the current token is '=' then we treat that as an assignment expression.
+        // This effectively short-circuits all the usual precedence checks because
+        // assignment is typically the lowest-precedence operator.
+        if (parser->current_token.type == TOKEN_OPERATOR &&
+            strcmp(parser->current_token.value, "=") == 0)
+        {
+            // Consume '='
+            parser_advance(parser);
+
+            // Parse the right-hand side of the assignment with the lowest precedence (0)
+            ASTNode* right = parse_expression(parser, 0);
+            if (!right) {
+                fprintf(stderr, "Error: Failed to parse right-hand side of assignment\n");
+                free_ast(left);
+                return NULL;
+            }
+
+            // Build an AST_ASSIGNMENT node
+            ASTNode* assignment_node = create_ast_node(AST_ASSIGNMENT);
+            if (!assignment_node) {
+                fprintf(stderr, "Error: Memory allocation failed for assignment node\n");
+                free_ast(left);
+                free_ast(right);
+                return NULL;
+            }
+
+             if (left->type != AST_VARIABLE) {
+                 report_error(parser, "Left-hand side of '=' must be a variable");
+                 free_ast(left);
+                 free_ast(right);
+                 free_ast(assignment_node);
+                 return NULL;
+             }
+
+            // Transfer or copy the variable name from 'left' if it's AST_VARIABLE
+            if (left->type == AST_VARIABLE) {
+                // Take ownership of the name pointer
+                assignment_node->assignment.variable = left->variable.variable_name;
+                // We do NOT free left->variable.variable_name here, because we just moved it
+                // or we can do a strdup if we want a brand new copy, etc.
+                left->variable.variable_name = NULL; 
+            } else {
+                // If you don't enforce variable left-sides, you might do something else:
+                assignment_node->assignment.variable = strdup("<nonVariable>");
+            }
+
+            // Attach the right side
+            assignment_node->assignment.value = right;
+
+            // We no longer need 'left' as an AST node
+            free(left);
+            
+            // The assignment node becomes our new "left"
+            left = assignment_node;
+        }
+        // --- B) Otherwise, check for other operators (+, -, *, /, etc.) by precedence ---
+        else if (parser->current_token.type == TOKEN_OPERATOR) {
+            char* op = parser->current_token.value;
+            int precedence = get_operator_precedence(op);
+
+            // If the next operator's precedence is lower than the min_precedence we expect,
+            // we break out of the loop and return what we have so far.
+            if (precedence < min_precedence) {
+                break;
+            }
+
+            // Otherwise, consume the operator
+            char* operator = strdup(op);
+            if (!operator) {
+                fprintf(stderr, "Error: Memory allocation failed for operator\n");
+                free_ast(left);
+                return NULL;
+            }
+            parser_advance(parser);
+
+            // Parse the right-hand side with precedence = (current precedence + 1)
+            // so that we handle left-recursive expressions properly
+            ASTNode* right = parse_expression(parser, precedence + 1);
+            if (!right) {
+                fprintf(stderr, "Error: Failed to parse right-hand side of expression\n");
+                free(operator);
+                free_ast(left);
+                return NULL;
+            }
+
+            // Create a BinaryOp node
+            ASTNode* binary_op = create_ast_node(AST_BINARY_OP);
+            if (!binary_op) {
+                fprintf(stderr, "Error: Memory allocation failed for binary operation node\n");
+                free(operator);
+                free_ast(left);
+                free_ast(right);
+                return NULL;
+            }
+
+            // Hook up left, operator, right
+            binary_op->binary_op.left = left;
+            binary_op->binary_op.right = right;
+            binary_op->binary_op.op_symbol = operator;
+
+            // That becomes our new left side
+            left = binary_op;
+        }
+        // --- C) If it's not assignment or a recognized operator, we stop here ---
+        else {
             break;
         }
-
-        char* operator = strdup(op);
-        if (!operator) {
-            fprintf(stderr, "Error: Memory allocation failed for operator\n");
-            free_ast(left);
-            return NULL;
-        }
-        parser_advance(parser);
-
-        ASTNode* right = parse_expression(parser, precedence + 1);
-        if (!right) {
-            fprintf(stderr, "Error: Failed to parse right-hand side of expression\n");
-            free(operator);
-            free_ast(left);
-            return NULL;
-        }
-
-        ASTNode* binary_op = create_ast_node(AST_BINARY_OP);
-        if (!binary_op) {
-            fprintf(stderr, "Error: Memory allocation failed for binary operation node\n");
-            free(operator);
-            free_ast(left);
-            free_ast(right);
-            return NULL;
-        }
-
-        binary_op->binary_op.left = left;
-        binary_op->binary_op.right = right;
-        binary_op->binary_op.op_symbol = operator;
-
-        left = binary_op;
     }
 
     return left;
@@ -496,7 +571,7 @@ ASTNode* parse_statement(Parser* parser) {
     // Match a variable declaration
     if (parser->current_token.type == TOKEN_KEYWORD &&
         strcmp(parser->current_token.value, "var") == 0) {
-        return parse_variable_declaration(parser);
+        return parse_variable_declaration(parser, false);
     }
 
     // Match an assignment
@@ -847,32 +922,50 @@ ASTNode* parse_for_loop(Parser* parser) {
         return NULL;
     }
 
-    // Expect an opening parenthesis '(' for the loop header
+    // Expect an opening parenthesis '('
     if (!match_token(parser, TOKEN_PUNCTUATION, "(")) {
         report_error(parser, "Expected '(' after 'for'");
         return NULL;
     }
 
-    // Parse the initializer (optional)
+    //-------------------------------------------
+    // 1) Parse the initializer (optional)
+    //-------------------------------------------
     ASTNode* initializer = NULL;
-    if (parser->current_token.type != TOKEN_PUNCTUATION || strcmp(parser->current_token.value, ";") != 0) {
-        initializer = parse_statement(parser);
-        if (!initializer) {
-            fprintf(stderr, "Error: Failed to parse initializer in 'for' loop\n");
-            return NULL;
+    // If the current token isn't an immediate semicolon, we parse something:
+    if (!(parser->current_token.type == TOKEN_PUNCTUATION &&
+          strcmp(parser->current_token.value, ";") == 0))
+    {
+        // If it's 'var', 'let', or 'const' => parse a variable declaration in for-header mode
+        if (parser->current_token.type == TOKEN_KEYWORD &&
+            (strcmp(parser->current_token.value, "var") == 0 ||
+             strcmp(parser->current_token.value, "let") == 0 ||
+             strcmp(parser->current_token.value, "const") == 0))
+        {
+            // parse_variable_declaration(..., true) means "don't consume a trailing semicolon here"
+            initializer = parse_variable_declaration(parser, true);
+        }
+        else {
+            // Otherwise parse an expression initializer (like i = 0)
+            initializer = parse_expression(parser, 0);
         }
     }
 
-    // Expect a semicolon ';' after the initializer (or skip if no initializer)
+    // Now we consume the semicolon that ends the for-header "initializer" part
     if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
         report_error(parser, "Expected ';' after initializer in 'for' loop");
         free_ast(initializer);
         return NULL;
     }
 
-    // Parse the condition (optional)
+    //-------------------------------------------
+    // 2) Parse the condition (optional)
+    //-------------------------------------------
     ASTNode* condition = NULL;
-    if (parser->current_token.type != TOKEN_PUNCTUATION || strcmp(parser->current_token.value, ";") != 0) {
+    // If the next token is not an immediate semicolon, parse an expression for the condition
+    if (!(parser->current_token.type == TOKEN_PUNCTUATION &&
+          strcmp(parser->current_token.value, ";") == 0))
+    {
         condition = parse_expression(parser, 0);
         if (!condition) {
             fprintf(stderr, "Error: Failed to parse condition in 'for' loop\n");
@@ -881,7 +974,7 @@ ASTNode* parse_for_loop(Parser* parser) {
         }
     }
 
-    // Expect a semicolon ';' after the condition (or skip if no condition)
+    // Then consume the semicolon separating condition from increment
     if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
         report_error(parser, "Expected ';' after condition in 'for' loop");
         free_ast(initializer);
@@ -889,9 +982,14 @@ ASTNode* parse_for_loop(Parser* parser) {
         return NULL;
     }
 
-    // Parse the increment expression (optional)
+    //-------------------------------------------
+    // 3) Parse the increment (optional)
+    //-------------------------------------------
     ASTNode* increment = NULL;
-    if (parser->current_token.type != TOKEN_PUNCTUATION || strcmp(parser->current_token.value, ")") != 0) {
+    // If we don't see a closing parenthesis, parse an expression
+    if (!(parser->current_token.type == TOKEN_PUNCTUATION &&
+          strcmp(parser->current_token.value, ")") == 0))
+    {
         increment = parse_expression(parser, 0);
         if (!increment) {
             fprintf(stderr, "Error: Failed to parse increment in 'for' loop\n");
@@ -910,7 +1008,9 @@ ASTNode* parse_for_loop(Parser* parser) {
         return NULL;
     }
 
-    // Parse the body of the for loop
+    //-------------------------------------------
+    // 4) Parse the loop body
+    //-------------------------------------------
     ASTNode* body = parse_block(parser);
     if (!body) {
         fprintf(stderr, "Error: Failed to parse body of 'for' loop\n");
@@ -932,9 +1032,9 @@ ASTNode* parse_for_loop(Parser* parser) {
     }
 
     for_node->for_loop.initializer = initializer;
-    for_node->for_loop.condition = condition;
-    for_node->for_loop.increment = increment;
-    for_node->for_loop.body = body;
+    for_node->for_loop.condition   = condition;
+    for_node->for_loop.increment   = increment;
+    for_node->for_loop.body        = body;
 
     return for_node;
 }
@@ -1144,18 +1244,19 @@ ASTNode* parse_assignment(Parser* parser) {
     return assignment_node;
 }
 
-ASTNode* parse_variable_declaration(Parser* parser) {
+ASTNode* parse_variable_declaration(Parser* parser, bool inForHeader) {
     // Ensure the current token is a keyword for variable declaration (e.g., "var", "let", "const")
     if (parser->current_token.type != TOKEN_KEYWORD ||
         (strcmp(parser->current_token.value, "var") != 0 &&
          strcmp(parser->current_token.value, "let") != 0 &&
-         strcmp(parser->current_token.value, "const") != 0)) {
+         strcmp(parser->current_token.value, "const") != 0))
+    {
         fprintf(stderr, "Error: Expected a variable declaration keyword (e.g., var, let, const)\n");
         return NULL;
     }
 
     // Advance past the declaration keyword
-    parser_advance(parser);
+    parser_advance(parser); // skip 'var', 'let', or 'const'
 
     // Ensure the next token is an identifier (variable name)
     if (parser->current_token.type != TOKEN_IDENTIFIER) {
@@ -1169,13 +1270,13 @@ ASTNode* parse_variable_declaration(Parser* parser) {
         fprintf(stderr, "Error: Memory allocation failed for variable name\n");
         return NULL;
     }
+    parser_advance(parser); // Skip the variable name
 
-    // Advance to the next token
-    parser_advance(parser);
-
-    // Check for an optional initializer (e.g., "var x = 5;")
+    // Check for an optional initializer (e.g., "var x = 5")
     ASTNode* initial_value = NULL;
-    if (parser->current_token.type == TOKEN_OPERATOR && strcmp(parser->current_token.value, "=") == 0) {
+    if (parser->current_token.type == TOKEN_OPERATOR &&
+        strcmp(parser->current_token.value, "=") == 0)
+    {
         // Advance past the '=' operator
         parser_advance(parser);
 
@@ -1189,25 +1290,26 @@ ASTNode* parse_variable_declaration(Parser* parser) {
     }
 
     // Create the variable declaration node
-    ASTNode* variable_decl_node = (ASTNode*)malloc(sizeof(ASTNode));
+    ASTNode* variable_decl_node = create_ast_node(AST_VARIABLE_DECL);
     if (!variable_decl_node) {
         fprintf(stderr, "Error: Memory allocation failed for variable declaration node\n");
         free(variable_name);
         if (initial_value) free_ast(initial_value);
         return NULL;
     }
-
-    variable_decl_node->type = AST_VARIABLE_DECL;
     variable_decl_node->variable_decl.variable_name = variable_name;
     variable_decl_node->variable_decl.initial_value = initial_value;
 
-    // Expect a semicolon ';' after the variable declaration
-    if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
-        report_error(parser, "Expected ';' after variable declaration");
-        free(variable_name);
-        if (initial_value) free_ast(initial_value);
-        free(variable_decl_node);
-        return NULL;
+    // If this is a STANDALONE declaration (not in for-header), consume the semicolon now.
+    // If it's inside a for-loop header, we'll rely on parse_for_loop() to handle the ';'.
+    if (!inForHeader) {
+        if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
+            report_error(parser, "Expected ';' after variable declaration");
+            free(variable_name);
+            if (initial_value) free_ast(initial_value);
+            free(variable_decl_node);
+            return NULL;
+        }
     }
 
     return variable_decl_node;

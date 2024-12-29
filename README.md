@@ -502,4 +502,4 @@ print("=== The next-generation EmberScript adventure has ended. ===");
 
 ## License
 
-EmberScript is licensed under the GPL-3.0 License. See [LICENSE](LICENSE) for details.
+EmberScript is licensed under the MIT License. See [LICENSE](LICENSE) for details.

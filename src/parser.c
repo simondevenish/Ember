@@ -159,7 +159,21 @@ void free_ast(ASTNode* node) {
                 free_ast(node->variable_decl.initial_value);
             }
             break;
+        case AST_ARRAY_LITERAL:
+            // Free each element in the array
+            for (int i = 0; i < node->array_literal.element_count; i++) {
+                free_ast(node->array_literal.elements[i]);
+            }
+            // Free the array of element pointers
+            free(node->array_literal.elements);
+            break;
 
+        case AST_INDEX_ACCESS:
+            // Free the array expression
+            free_ast(node->index_access.array_expr);
+            // Free the index expression
+            free_ast(node->index_access.index_expr);
+            break; 
         case AST_UNARY_OP:
             free(node->unary_op.op_symbol);
             free_ast(node->unary_op.operand);

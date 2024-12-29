@@ -41,8 +41,6 @@ __pycache__/
 tags
 TAGS
 
-# Default scripts or sample scripts
-scripts/*.ember
 
 # Exclude specific Makefile targets
 Makefile~

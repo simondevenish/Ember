@@ -8,34 +8,87 @@
 #include <stdlib.h>
 
 int interpreter_execute_script(const char* source) {
-    // Step 1: Lexing
-    Lexer lexer;
-    lexer_init(&lexer, source);
-
-    // Step 2: Parsing
-    Parser* parser = parser_create(&lexer);
-    ASTNode* root = parse_script(parser);
-
-    if (!root) {
-        fprintf(stderr, "Error: Parsing failed.\n");
+    if (!source) {
+        fprintf(stderr, "Error: Source code is NULL.\n");
         return 1;
     }
 
-    // Step 3: Runtime Evaluation
-    Environment* env = runtime_create_environment();
-    
-    // Optionally, register built-in functions here, if required
-    // runtime_register_builtin(env, "print", builtin_print_function);
+    /* -----------------------------
+       1) Lexing
+       ----------------------------- */
+    Lexer lexer;
+    lexer_init(&lexer, source);
 
-    RuntimeValue result = runtime_evaluate(env, root);
+    /* -----------------------------
+       2) Parsing
+       ----------------------------- */
+    Parser* parser = parser_create(&lexer);
+    ASTNode* root = parse_script(parser);
+    if (!root) {
+        fprintf(stderr, "Error: Parsing failed.\n");
+        // Clean up parser
+        free(parser);
+        return 1;
+    }
 
-    // Debug output (optional)
-    print_runtime_value(&result);
+    /* -----------------------------
+       3) Create a Bytecode Chunk
+       ----------------------------- */
+    BytecodeChunk* chunk = vm_create_chunk();
+    if (!chunk) {
+        fprintf(stderr, "Error: Failed to create bytecode chunk.\n");
+        free_ast(root);
+        free(parser);
+        return 1;
+    }
 
-    // Cleanup
+    /* -----------------------------
+       4) Create a Symbol Table
+       ----------------------------- */
+    SymbolTable* symtab = symbol_table_create();
+    if (!symtab) {
+        fprintf(stderr, "Error: Failed to create symbol table.\n");
+        vm_free_chunk(chunk);
+        free_ast(root);
+        free(parser);
+        return 1;
+    }
+
+    /* -----------------------------
+       5) Compile AST -> Bytecode
+       ----------------------------- */
+    if (!compile_ast(root, chunk, symtab)) {
+        fprintf(stderr, "Error: Compilation failed.\n");
+        symbol_table_free(symtab);
+        vm_free_chunk(chunk);
+        free_ast(root);
+        free(parser);
+        return 1;
+    }
+
+    /* -----------------------------
+       6) Create a VM and run it
+       ----------------------------- */
+    VM* vm = vm_create(chunk);
+    if (!vm) {
+        fprintf(stderr, "Error: Failed to create VM.\n");
+        symbol_table_free(symtab);
+        vm_free_chunk(chunk);
+        free_ast(root);
+        free(parser);
+        return 1;
+    }
+
+    int vm_result = vm_run(vm);  // 0 on success, non-zero on error
+
+    /* -----------------------------
+       7) Cleanup
+       ----------------------------- */
+    vm_free(vm);
+    symbol_table_free(symtab);
+    vm_free_chunk(chunk);
     free_ast(root);
-    runtime_free_environment(env);
     free(parser);
 
-    return 0;
+    return vm_result;
 }

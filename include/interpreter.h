@@ -3,6 +3,8 @@
 
 #include "lexer.h"
 #include "parser.h"
+#include "compiler.h"
+#include "virtual_machine.h"
 #include "runtime.h"
 
 /**

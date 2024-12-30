@@ -1,37 +1,64 @@
 cmake_minimum_required(VERSION 3.10)
-project(EmberScript C CXX)
+project(Ember C CXX)
 
-# Set the C and C++ standards
+# C and C++ standards
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
 
-# Set build type if not specified
+# Default build type
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-# Include directory for EmberScript headers
-include_directories(include)
+# Let’s define the path to the "include" folder; best to use an absolute or CMAKE_CURRENT_SOURCE_DIR
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 
-# Compiler warnings and other flags (example: -Wall -Wextra -g -O0)
+# Add common compiler flags
 add_compile_options(-Wall -Wextra -g -O0)
 
-# Gather all source files from src/
-file(GLOB EMBERSCRIPT_SOURCES src/*.c)
+# Gather all .c source files from src/
+file(GLOB EMBER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 
-# Create static library for EmberScript
-add_library(EmberScript STATIC ${EMBERSCRIPT_SOURCES})
+# Build a static library named "Ember" from those sources
+add_library(Ember STATIC ${EMBER_SOURCES})
 
-# Optionally, you can install this library (if you want):
-# install(TARGETS EmberScript DESTINATION lib)
-# install(DIRECTORY include/ DESTINATION include)
+# Build the emberc CLI from main.c (adjust path if main.c is in another folder)
+add_executable(emberc "${CMAKE_CURRENT_SOURCE_DIR}/main.c")
 
-# --- Build the executable for running scripts ---
-# main.c can be anywhere; here we assume it's in the project root.
-add_executable(ember_script_exec main.c)
+# Link emberc to the Ember library plus the standard libs (math, pthread, etc.)
+target_link_libraries(emberc PRIVATE Ember m pthread)
 
-# Link the executable against the EmberScript library
-target_link_libraries(ember_script_exec PRIVATE EmberScript)
+# --------------------------
+# Installation
+# --------------------------
 
-# If you'd like to install the executable:
-# install(TARGETS ember_script_exec DESTINATION bin)
+# 1) Install the library + executable
+#    - RUNTIME (exe) goes to bin
+#    - ARCHIVE (static lib) goes to lib
+#    - LIBRARY (shared lib, if you ever switch) also goes to lib
+install(
+    TARGETS Ember emberc
+    RUNTIME DESTINATION bin
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+)
+
+# 2) Install headers
+#    This copies everything under 'include/' to the system include path:
+#    For example, if your headers are in include/Ember/*.h, 
+#    they end up in /usr/local/include/Ember/*.h (by default).
+install(
+    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+    DESTINATION include
+    FILES_MATCHING
+    PATTERN "*.h"
+    PATTERN "*.hpp"
+)
+
+# --------------------------
+# (Optional) Tests
+# --------------------------
+# Example:
+# add_executable(ember_tests tests/test_something.cpp)
+# target_link_libraries(ember_tests PRIVATE Ember gtest pthread)
+# add_test(NAME EmberTests COMMAND ember_tests)

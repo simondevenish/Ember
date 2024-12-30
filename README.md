@@ -1,99 +1,15 @@
 
-# EmberScript
+# Ember
 
 <p align="center">
   <img src="./EmberScript-Logo.png" alt="EmberScript Logo" width="200" />
 </p>
 
-EmberScript is a lightweight, extensible, and highly portable scripting language designed for embedding in games and applications. Written entirely in pure C, EmberScript provides high performance and minimal overhead—perfect for resource-constrained environments. Combining simplicity and flexibility, EmberScript excels at defining game logic, creating in-game events, and scripting interactive behaviors.
+Ember is a lightweight, extensible, and highly portable language designed for both embedding in games and applications or compiling into stand-alone executables. Written entirely in pure C, Ember offers high performance with minimal overhead—perfect for resource-constrained environments. Combining simplicity and flexibility, Ember excels at defining game logic, creating in-game events, and scripting interactive behaviors.
 
-EmberScript can be run directly by parsing its Abstract Syntax Tree (AST) and interpreting it on the fly, or it can be compiled to bytecode and executed on a lightweight, stack-based Virtual Machine—giving developers the freedom to choose whichever approach best suits their project.
+Ember compiles to a lightweight, stack-based Virtual Machine for maximum performance, while a subset known as “Ember Script” can interpret the Abstract Syntax Tree (AST) directly—allowing developers to choose whichever approach best fits their project’s needs.
 
-Long term, EmberScript aspires to merge the best features from Lua, AngelScript, and Haxe—such as lightweight coroutines, strong typing, and flexible table structures—all while maintaining an accessible, modern syntax. By striking a balance between usability and power, EmberScript aims to become the ideal choice for scripting and rapid prototyping in both small and large-scale game projects.
-
-## Features
-- **Two Execution Modes:** Choose between **direct AST interpretation** for rapid development or **bytecode compilation** for running scripts on a lightweight, stack-based **VM**.
-- **Dynamic Typing:** EmberScript provides the flexibility of dynamic typing, making it ideal for rapid prototyping and game logic.
-- **Built-in Functions:** Extend the language with custom built-in functions to interact with your engine or application.
-- **Interoperability:** EmberScript is written in pure C. Easily integrate EmberScript into your C or C++ projects with the lightweight interpreter.
-- **Extensible Syntax:** A simple, clear syntax inspired by modern scripting languages.
-- **Future Roadmap:** Planned features include coroutines, modules, type inference, and pattern matching.
-- **Core Language Features**:
-  - Variables and constants
-  - Functions
-  - Conditionals (`if`, `else`)
-  - Loops (`while`, `for`)
-  - Basic arithmetic and string manipulation
-  - Built-in print function for debugging
-
-## Quick Start
-
-### Embedding EmberScript
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-username/EmberScript.git
-   cd EmberScript
-   ```
-
-2. Compile the project:
-   ```bash
-   make
-   ```
-
-3. Include EmberScript in your project:
-TODO
-
-4. Use the EmberScript interpreter in your application:
-TODO
-
-### Writing Scripts
-
-Create a script file (`example.ember`):
-```javascript
-// Demonstrates variables, arrays, functions, conditionals, loops, arithmetic, and printing
-
-var gold = 0;
-var health = 100;
-var items = ["Sword", "Potion", "Shield"];
-
-print("Starting adventure with health = " + health);
-
-// A simple function to simulate a battle
-function battle(enemy, damage) {
-    print("A wild " + enemy + " appears!");
-    
-    while (health > 0 && damage > 0) {
-        print("You attack the " + enemy + " with your " + items[0] + "!");
-        damage = damage - 25;
-        
-        if (damage <= 0) {
-            gold = gold + 20;
-            print("You defeated the " + enemy + "! Loot gained: 20 gold.");
-        } else {
-            print("The " + enemy + " fights back!");
-            health = health - 30;
-            
-            if (health <= 0) {
-                print("You have been defeated...");
-            }
-        }
-    }
-}
-
-// Show all items in the inventory with a fixed-size loop
-for (var i = 0; i < 3; i = i + 1) {
-    print("Item " + i + ": " + items[i]);
-}
-
-// Initiate a simple battle scenario
-battle("Goblin", 50);
-
-print("Final stats: health = " + health + ", gold = " + gold);
-
-```
-
-Run your application to see the script in action!
+Long term, Ember aims to blend the best features of Lua, AngelScript, and Haxe—such as lightweight coroutines, optional strong typing, and flexible data structures—while maintaining a friendly, modern syntax. By balancing usability and power, Ember seeks to be the go-to choice for scripting, rapid prototyping, and more substantial development in both small- and large-scale projects.
 
 ## Roadmap
 
@@ -138,7 +54,7 @@ Run your application to see the script in action!
 
 ## Example: Future Features in Action
 
-Below is a **demonstration script** showcasing many of EmberScript’s planned and partially implemented features — from modules/namespaces, typed variables, and traits, to coroutines, async/await, FRP streams, property observers, operator overloading, and more. While not all of these are fully functional in the current build, this script illustrates the **long-term roadmap** features:
+Below is a **demonstration script** showcasing many of Embers’s planned and partially implemented features — from modules/namespaces, typed variables, and traits, to coroutines, async/await, FRP streams, property observers, operator overloading, and more. While not all of these are fully functional in the current build, this script illustrates the **long-term roadmap** features:
 
 ```javascript
 #if DEBUG
@@ -167,7 +83,7 @@ var isGameRunning = true;  // A dynamic variable
 
 // Typed variables (AngelScript/Haxe style)
 let number difficulty = 2;  
-let string greeting = "Welcome to EmberScript Next-Gen!";
+let string greeting = "Welcome to Ember Next-Gen!";
 
 // Abstract type (Haxe-inspired) example
 abstract type Mana = number from {
@@ -496,10 +412,10 @@ testFFI();
 // Possibly do a hot reload
 hotReload();
 
-print("=== The next-generation EmberScript adventure has ended. ===");
+print("=== The next-generation Ember adventure has ended. ===");
 ```
 <br/>
 
 ## License
 
-EmberScript is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+Ember is licensed under the MIT License. See [LICENSE](LICENSE) for details.

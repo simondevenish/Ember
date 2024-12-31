@@ -20,7 +20,8 @@ typedef enum {
     AST_BLOCK,
     AST_FUNCTION_DEF,
     AST_ARRAY_LITERAL,
-    AST_INDEX_ACCESS
+    AST_INDEX_ACCESS,
+    AST_IMPORT,
 } ASTNodeType;
 
 // AST Node Structure
@@ -45,7 +46,8 @@ typedef struct ASTNode {
         struct { struct ASTNode* left; struct ASTNode* right; char* op_symbol; } logical_op; // Logical operation (e.g., &&, ||)
         struct { char* variable_name; } variable; // For AST_VARIABLE
         struct { struct ASTNode** elements; int element_count; } array_literal; // For AST_ARRAY_LITERAL
-         struct { struct ASTNode* array_expr; struct ASTNode* index_expr; } index_access; // For AST_INDEX_ACCESS
+        struct { struct ASTNode* array_expr; struct ASTNode* index_expr; } index_access; // For AST_INDEX_ACCESS
+        struct { char* import_path; } import_stmt; // For AST_IMPORT
     };
 } ASTNode;
 
@@ -140,6 +142,13 @@ ASTNode* parse_block(Parser* parser);
  * @return ASTNode* The parsed function definition node.
  */
 ASTNode* parse_function_definition(Parser* parser);
+
+/**
+ * @brief Parse an import statement of the form:
+ *        import items.ember
+ * (No trailing semicolon, no quotes.)
+ */
+static ASTNode* parse_import_statement(Parser* parser);
 
 /**
  * @brief Parse an if statement with its condition and body.

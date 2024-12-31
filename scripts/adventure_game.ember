@@ -1,12 +1,13 @@
 // adventure_game.ember
 
+import items.ember;
+
 // Variable declarations
 var playerName = "Adventurer";
 var health = 50;
 var gold = 0;
 var inventory = "Sword";
 var isAlive = true;
-var items = ["Lantern", "Map", "Journal"];
 
 var lantern = items[0];
 

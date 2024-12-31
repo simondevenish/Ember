@@ -7,6 +7,7 @@
 #include "compiler.h"
 #include "virtual_machine.h"
 #include "parser.h"  // For ASTNodeType, ASTNode, etc.
+#include "utils.h"
 
 static void compile_node(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab);
 
@@ -326,6 +327,51 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             patch_jump(chunk, loopEndJump);
             break;
         }
+        case AST_IMPORT: {
+            const char* filename = node->import_stmt.import_path;
+
+            // 1) Read file
+            char* import_source = read_file(filename);
+            if (!import_source) {
+                fprintf(stderr, "Compiler error: Could not open import file '%s'\n", filename);
+                return;
+            }
+
+            // 2) Lex & parse => build an AST
+            Lexer import_lexer;
+            lexer_init(&import_lexer, import_source);
+            Parser* import_parser = parser_create(&import_lexer);
+            ASTNode* import_root = parse_script(import_parser);
+
+            if (!import_root) {
+                fprintf(stderr, "Compiler error: Parsing '%s' failed.\n", filename);
+                free(import_parser);
+                free(import_source);
+                return;
+            }
+            
+            // 3) Compile the new AST into *this same* chunk + symtab
+            bool ok = compile_ast(import_root, chunk, symtab);
+            if (!ok) {
+                fprintf(stderr, "Compiler error: Sub-compile for '%s' failed.\n", filename);
+            }
+
+            // 4) **Remove final OP_EOF** if present
+            if (chunk->code_count > 0 &&
+                chunk->code[chunk->code_count - 1] == OP_EOF)
+            {
+                chunk->code_count--;
+            }
+
+            // 5) Cleanup
+            free_ast(import_root);
+            free(import_parser);
+            free(import_source);
+
+            // no code needed at runtime => we just physically merged it
+            break;
+        }
+
         case AST_FOR_LOOP: {
             // for (init; cond; inc) { body }
             // compile init
@@ -397,6 +443,13 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             }
             break;
         }
+        case AST_SWITCH_CASE: {
+            // (Placeholder) We have not implemented codegen for switch statements yet.
+            // For now, do nothing or produce a warning.
+            // e.g.,
+            fprintf(stderr, "Warning: Switch/case code generation not implemented.\n");
+            break;
+        }
         default:
             fprintf(stderr, "Compiler error: Unhandled statement node type %d\n", node->type);
             break;
@@ -425,6 +478,8 @@ static void compile_node(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symta
         case AST_UNARY_OP:
         case AST_LITERAL:
         case AST_VARIABLE:
+        case AST_IMPORT:
+        case AST_SWITCH_CASE:
             compile_statement(node, chunk, symtab);
             break;
 

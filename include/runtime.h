@@ -113,6 +113,20 @@ Environment* runtime_create_environment();
 Environment* runtime_create_child_environment(Environment* parent);
 
 /**
+ * @brief Reads and executes a .ember file into the specified environment.
+ *
+ * Loads the specified file (e.g., "items.ember"), parses it, and executes
+ * all top-level statements in the same environment. This allows variables,
+ * functions, and other definitions declared in that file to become available
+ * to scripts that import it.
+ *
+ * @param env Pointer to the environment into which the file's code should be executed.
+ * @param filename Path to the .ember script file to load and execute.
+ * @return true on success, false if there was an error reading or parsing the file.
+ */
+bool runtime_execute_file_in_environment(Environment* env, const char* filename);
+
+/**
  * @brief Add or update a variable in the current environment.
  * 
  * @param env Pointer to the environment.

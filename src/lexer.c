@@ -245,7 +245,7 @@ Token lexer_next_token(Lexer* lexer) {
 bool is_keyword(const char* identifier) {
     static const char* keywords[] = {
         "if", "else", "while", "for", "return", "break", "continue",
-        "function", "var", "const", "let", "true", "false", "null"
+        "function", "var", "const", "let", "true", "false", "null", "import"
     };
 
     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);

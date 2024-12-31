@@ -1,5 +1,3 @@
-#include "runtime.h"
-
 #include <stdio.h>      // For input/output functions (e.g., fprintf)
 #include <stdlib.h>     // For memory allocation (e.g., malloc, free)
 #include <string.h>     // For string manipulation (e.g., strcpy, strcmp)
@@ -13,6 +11,9 @@ typedef HANDLE pthread_t;
 #endif
 #include <ctype.h>
 #include <math.h>
+
+#include "runtime.h"
+#include "utils.h"
 
 Environment* runtime_create_environment() {
     // Allocate memory for the environment
@@ -328,6 +329,17 @@ RuntimeValue runtime_evaluate(Environment* env, ASTNode* node) {
             result = runtime_execute_function_call(env, node);
             break;
         }
+        case AST_IMPORT: {
+            // node->import_stmt.import_path => e.g. "items.ember"
+            bool ok = runtime_execute_file_in_environment(env, 
+                                 node->import_stmt.import_path);
+            if (!ok) {
+                fprintf(stderr, "Error: Failed to import '%s'\n",
+                        node->import_stmt.import_path);
+            }
+            // keep result=null
+            break;
+        }
         case AST_UNARY_OP: {
             RuntimeValue operand = runtime_evaluate(env, node->unary_op.operand);
             if (strcmp(node->unary_op.op_symbol, "!") == 0) {
@@ -490,6 +502,38 @@ void runtime_execute_block(Environment* env, ASTNode* block) {
         ASTNode* statement = block->block.statements[i];
         runtime_evaluate(env, statement);
     }
+}
+
+bool runtime_execute_file_in_environment(Environment* env, const char* filename) {
+    // 1) Read file
+    char* script_content = read_file(filename);
+    if (!script_content) {
+        fprintf(stderr, "Error: Could not open import file '%s'\n", filename);
+        return false;
+    }
+
+    // 2) Lex + parse => get AST
+    Lexer lex;
+    lexer_init(&lex, script_content);
+    Parser* p = parser_create(&lex);
+    ASTNode* root = parse_script(p);
+    free(p); // free parser struct if needed
+
+    if (!root) {
+        fprintf(stderr, "Error: Parsing import file '%s' failed.\n", filename);
+        free(script_content);
+        return false;
+    }
+
+    // 3) Evaluate the top-level AST in the SAME environment
+    //    which merges the variables and functions into the current environment.
+    runtime_execute_block(env, root);
+    // or if parse_script returns a block node, we can do:
+    // runtime_execute_block(env, root);
+
+    free_ast(root);
+    free(script_content);
+    return true;
 }
 
 RuntimeValue runtime_execute_function_call(Environment* env, ASTNode* function_call) {

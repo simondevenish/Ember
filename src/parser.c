@@ -182,6 +182,9 @@ void free_ast(ASTNode* node) {
         case AST_SWITCH_CASE:
             // Implement freeing logic for switch cases
             break;
+        case AST_IMPORT:
+            free(node->import_stmt.import_path);
+            break;
         default:
             fprintf(stderr, "Error: Unknown AST node type\n");
             break;
@@ -688,6 +691,11 @@ ASTNode* parse_statement(Parser* parser) {
         return parse_function_definition(parser);
     }
 
+    if (parser->current_token.type == TOKEN_KEYWORD && 
+        strcmp(parser->current_token.value, "import") == 0) {
+        return parse_import_statement(parser);
+    }
+
     // Match a block
     if (parser->current_token.type == TOKEN_PUNCTUATION &&
         strcmp(parser->current_token.value, "{") == 0) {
@@ -912,6 +920,84 @@ ASTNode* parse_function_definition(Parser* parser) {
     function_def_node->function_def.body = body;
 
     return function_def_node;
+}
+
+ASTNode* parse_import_statement(Parser* parser)
+{
+    // 1) We expect "import" as the current token
+    if (!match_token(parser, TOKEN_KEYWORD, "import")) {
+        report_error(parser, "Expected 'import' keyword");
+        return NULL;
+    }
+
+    // 2) Now we expect an identifier (or you could allow string, if you prefer)
+    if (parser->current_token.type != TOKEN_IDENTIFIER) {
+        char msg[128];
+        snprintf(msg, sizeof(msg),
+            "Expected identifier after 'import', got token type=%d val='%s'",
+            parser->current_token.type,
+            parser->current_token.value ? parser->current_token.value : "(null)");
+        report_error(parser, msg);
+        return NULL;
+    }
+
+    // Start our import_path with the first identifier
+    char* import_path = strdup(parser->current_token.value);
+    if (!import_path) {
+        report_error(parser, "Memory allocation failed for import path");
+        return NULL;
+    }
+    parser_advance(parser); // consume the first identifier
+
+    // 3) While we see a '.', consume it then expect another identifier
+    while (parser->current_token.type == TOKEN_PUNCTUATION &&
+           strcmp(parser->current_token.value, ".") == 0)
+    {
+        // Skip the '.'
+        parser_advance(parser);
+
+        // Next token must be another identifier
+        if (parser->current_token.type != TOKEN_IDENTIFIER) {
+            report_error(parser, "Expected identifier after '.' in import path");
+            free(import_path);
+            return NULL;
+        }
+
+        // Append ".identifier" to import_path
+        size_t old_len = strlen(import_path);
+        size_t extra_len = strlen(parser->current_token.value) + 2; // +1 for '.' +1 for '\0'
+        char* new_path = (char*)malloc(old_len + extra_len);
+        if (!new_path) {
+            report_error(parser, "Memory allocation failed while appending to import path");
+            free(import_path);
+            return NULL;
+        }
+
+        sprintf(new_path, "%s.%s", import_path, parser->current_token.value);
+        free(import_path);
+        import_path = new_path;
+
+        // Advance past this identifier
+        parser_advance(parser);
+    }
+
+    // 4) Expect a semicolon to close the import statement
+    if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
+        report_error(parser, "Expected ';' after import statement");
+        free(import_path);
+        return NULL;
+    }
+
+    // 5) Build the AST_IMPORT node
+    ASTNode* node = create_ast_node(AST_IMPORT);
+    if (!node) {
+        report_error(parser, "Memory allocation failed for AST_IMPORT node");
+        free(import_path);
+        return NULL;
+    }
+    node->import_stmt.import_path = import_path;
+
+    return node;
 }
 
 ASTNode* parse_if_statement(Parser* parser) {

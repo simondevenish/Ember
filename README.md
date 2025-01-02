@@ -372,48 +372,83 @@ testFFI();
 hotReload();
 
 // ---------------------------------------------------------
-// (M) Inline Opcode Example - Sum 0..4
+// (M) Inline Opcode Example with memory + bitwise ops
 // ---------------------------------------------------------
-print("Demonstrating an optimized loop in inline opcode (like inline asm in C):");
+print("Using inline opcode to manipulate memory and do bitwise operations");
 
-// In a real system, the developer must ensure that variable slot #0
-// is safe to use for 'sum', and slot #1 is safe for 'i' (i.e. not used).
+// Suppose we want to fill a buffer of 1000 bytes with the value 42, 
+// then do some bitwise transformations on certain entries.
 inline_opcode {
-    // sum = 0
+    // 1) Allocate 1000 bytes
+    LOAD_CONST 1000
+    MEM_ALLOC
+    // top of stack is 'ptr'
+    STORE_VAR 0   // store pointer in global var 0
+
+    // 2) Initialize i=0
     LOAD_CONST 0
-    STORE_VAR 0
+    STORE_VAR 1   // store i in var 1
 
-    // i = 0
-    LOAD_CONST 0
-    STORE_VAR 1
-
-    :loopStart
-    // if (i < 5) == false => jump loopEnd
+LOOP_START:
+    // if i >= 1000 => exit
     LOAD_VAR 1
-    LOAD_CONST 5
-    LT
-    JUMP_IF_FALSE :loopEnd
+    LOAD_CONST 1000
+    OP_GTE             // i >= 1000?
+    JUMP_IF_TRUE 12,0  // jump to LOOP_END if true; offset is hypothetical
 
-    // sum = sum + i
-    LOAD_VAR 0
-    LOAD_VAR 1
-    ADD
-    STORE_VAR 0
+    // store 42 at (ptr + i)
+    LOAD_VAR 0  // ptr
+    LOAD_VAR 1  // i
+    LOAD_CONST 42
+    MEM_STORE8
 
-    // i++
+    // i++ => i = i + 1
     LOAD_VAR 1
     LOAD_CONST 1
     ADD
     STORE_VAR 1
 
-    // jump loopStart
-    JUMP :loopStart
+    // jump back to LOOP_START
+    LOOP 30,0 // negative offset, or patch later
 
-    :loopEnd
-    // PRINT sum
+LOOP_END:
+
+    // Let's pick an offset in the buffer to do a bitwise transform, 
+    // e.g. offset = 500
     LOAD_VAR 0
+    LOAD_CONST 500
+    MEM_LOAD8
+    // => top of stack is the byte we read (expected 42).
+
+    // SHIFT LEFT by 2 bits
+    // (In your VM, let's say OP_SHIFT_LEFT pops the shift amount & value from stack => pushes result)
+    LOAD_CONST 2
+    SHIFT_LEFT  
+    // => top of stack is 42 << 2 = 168
+
+    // Now AND it with 0xFF (just to demonstrate bitmasking)
+    LOAD_CONST 255
+    BIT_AND
+    // => top of stack is 168 & 0xFF = 168
+
+    // Store it back into memory at (ptr + 500)
+    LOAD_VAR 0
+    LOAD_CONST 500
+    // top of stack is still 168
+    MEM_STORE8
+
+    // Now read that back and print
+    LOAD_VAR 0
+    LOAD_CONST 500
+    MEM_LOAD8
     PRINT
+
+    // Finally, free the memory
+    LOAD_VAR 0
+    MEM_FREE
 }
+
+print("Inline memory + bitwise ops done!");
 
 print("=== The next-generation Ember adventure has ended. ===");
 ```

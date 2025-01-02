@@ -11,47 +11,6 @@ Ember compiles to a lightweight, stack-based Virtual Machine for maximum perform
 
 Long term, Ember aims to blend the best features of Lua, AngelScript, and Haxe—such as lightweight coroutines, optional strong typing, and flexible data structures—while maintaining a friendly, modern syntax. By balancing usability and power, Ember seeks to be the go-to choice for scripting, rapid prototyping, and more substantial development in both small- and large-scale projects.
 
-## Roadmap
-
-- **Core Features**:
-  - [x] Variable support
-  - [x] Function declarations
-  - [x] Basic conditionals and loops
-  - [x] Array support
-  - [ ] Debugger support
-
-- **Lua-Inspired Features**:
-  - [ ] Flexible table structures (combined arrays and dictionaries)
-  - [ ] Coroutines for asynchronous execution (e.g. `yield`, as in `gatherResources()`)
-  - [ ] Sandboxing for secure script execution
-
-- **AngelScript-Inspired Features**:
-  - [ ] Strong typing with generics (e.g. `function <T> combine(a: T, b: T): T`)
-  - [ ] Custom operators and operator overloading (`operator +(...) { ... }`)
-  - [ ] Event-based architecture (e.g. `on("playerDeath", fn)`)
-
-- **Haxe-Inspired Features**:
-  - [ ] Macros and compile-time meta-programming
-  - [ ] Pattern matching for cleaner conditional logic (`match (h) { ... }`)
-  - [ ] Null safety to reduce runtime errors (`maybeItem?.use()`)
-  - [ ] Type inference for simpler syntax (`let number difficulty = 2;`)
-  - [ ] Abstract types to enhance primitive behaviors (`abstract type Mana = number from { ... }`)
-
-- **General Features**:
-  - [ ] Modules and namespaces for better project structure (`import "utility.ember"; namespace epicAdventure { ... }`)
-  - [ ] Dynamic methods for runtime flexibility
-  - [ ] Serialization/deserialization for save/load functionality (`saveGame()`, `loadGame()`)
-  - [ ] Conditional compilation for platform-specific behavior (`#if DEBUG ... #else ... #end`)
-  - [ ] Property observers (`willSet`/`didSet`)  
-  - [ ] FRP streams (`healthStream.onChange(fn) { ... }`)
-  - [ ] Permissions (security & restricted APIs) (`permissions({ network: false }, fn) { ... }`)
-  - [ ] Chainable table updates (`player.set("health", 70).update("stats", fn) { ... }`)
-  - [ ] Async/await (futures/promises) (`async function fetchData(url) { ... }`)
-  - [ ] First-class FFI (foreign function interface) (`extern function C_Multiply(...)`)
-  - [ ] Hot reloading (`hotReload()`)
-  - [ ] Decorators (e.g., `@logCall`)
----
-
 ## Example: Future Features in Action
 
 Below is a **demonstration script** showcasing many of Embers’s planned and partially implemented features — from modules/namespaces, typed variables, and traits, to coroutines, async/await, FRP streams, property observers, operator overloading, and more. While not all of these are fully functional in the current build, this script illustrates the **long-term roadmap** features:

@@ -371,6 +371,50 @@ testFFI();
 // Possibly do a hot reload
 hotReload();
 
+// ---------------------------------------------------------
+// (M) Inline Opcode Example - Sum 0..4
+// ---------------------------------------------------------
+print("Demonstrating an optimized loop in inline opcode (like inline asm in C):");
+
+// In a real system, the developer must ensure that variable slot #0
+// is safe to use for 'sum', and slot #1 is safe for 'i' (i.e. not used).
+inline_opcode {
+    // sum = 0
+    LOAD_CONST 0
+    STORE_VAR 0
+
+    // i = 0
+    LOAD_CONST 0
+    STORE_VAR 1
+
+    :loopStart
+    // if (i < 5) == false => jump loopEnd
+    LOAD_VAR 1
+    LOAD_CONST 5
+    LT
+    JUMP_IF_FALSE :loopEnd
+
+    // sum = sum + i
+    LOAD_VAR 0
+    LOAD_VAR 1
+    ADD
+    STORE_VAR 0
+
+    // i++
+    LOAD_VAR 1
+    LOAD_CONST 1
+    ADD
+    STORE_VAR 1
+
+    // jump loopStart
+    JUMP :loopStart
+
+    :loopEnd
+    // PRINT sum
+    LOAD_VAR 0
+    PRINT
+}
+
 print("=== The next-generation Ember adventure has ended. ===");
 ```
 <br/>

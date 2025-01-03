@@ -5,11 +5,44 @@
   <img src="./EmberScript-Logo.png" alt="EmberScript Logo" width="200" />
 </p>
 
-Ember is a lightweight, extensible, and highly portable language designed for both embedding in games and applications or compiling into stand-alone executables. Written entirely in pure C, Ember offers high performance with minimal overhead—perfect for resource-constrained environments. Combining simplicity and flexibility, Ember excels at defining game logic, creating in-game events, and scripting interactive behaviors.
+A lightweight, portable programming language for both embedded use and stand-alone executables. Written entirely in C, Ember emphasizes:
 
-Ember compiles to a lightweight, stack-based Virtual Machine for maximum performance, while a subset known as “Ember Script” can interpret the Abstract Syntax Tree (AST) directly—allowing developers to choose whichever approach best fits their project’s needs.
+### Performance & Minimal Overhead
+A compact stack-based VM and optional AST interpreter are included, enabling usage from quick scripting tasks to entire application development.
 
-Long term, Ember aims to blend the best features of Lua, AngelScript, and Haxe—such as lightweight coroutines, optional strong typing, and flexible data structures—while maintaining a friendly, modern syntax. By balancing usability and power, Ember seeks to be the go-to choice for scripting, rapid prototyping, and more substantial development in both small- and large-scale projects.
+### Simplicity & Extensibility
+A clean syntax drawing inspiration from Lua, AngelScript, and Haxe.
+
+### Adaptability
+Capable of scaling from minimal environments to large-scale applications.
+
+---
+
+## Key Highlights
+
+### Pure C Implementation
+Ensures broad platform support and straightforward integration.
+
+### Bytecode Compilation
+Supports compilation to a fast, stack-based VM using the `emberc` command-line compiler, or interpretation of the AST directly.
+
+### Feature-Rich
+Includes coroutines, optional static typing, and a user-friendly syntax.
+
+### Standard Library & Modules
+Provides a core library, with the ability to import and extend functionality through custom modules.
+
+### Package Management
+Offers `emberpm` to install and manage Ember modules.
+
+### Future Roadmap
+Macros and compile-time meta-programming, pattern matching, hot reloading, inline bytecode, advanced memory operations, and more.
+
+---
+
+Ember aims to blend the convenience of dynamic scripting languages with the reliability of statically typed systems — all within a minimalist, modern design. Contributions and feedback are always welcome!
+
+---
 
 ## Example: Future Features in Action
 
@@ -368,7 +401,6 @@ displayStats(player);
 // Test FFI
 testFFI();
 
-// Possibly do a hot reload
 hotReload();
 
 // ---------------------------------------------------------
@@ -409,10 +441,9 @@ LOOP_START:
     STORE_VAR 1
 
     // jump back to LOOP_START
-    LOOP 30,0 // negative offset, or patch later
+    LOOP 30,0 // negative offset
 
 LOOP_END:
-
     // Let's pick an offset in the buffer to do a bitwise transform, 
     // e.g. offset = 500
     LOAD_VAR 0
@@ -421,7 +452,6 @@ LOOP_END:
     // => top of stack is the byte we read (expected 42).
 
     // SHIFT LEFT by 2 bits
-    // (In your VM, let's say OP_SHIFT_LEFT pops the shift amount & value from stack => pushes result)
     LOAD_CONST 2
     SHIFT_LEFT  
     // => top of stack is 42 << 2 = 168

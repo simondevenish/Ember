@@ -27,7 +27,7 @@ Ensures broad platform support and straightforward integration.
 Supports compilation to a fast, stack-based VM using the `emberc` command-line compiler, or interpretation of the AST directly.
 
 ### Feature-Rich
-Includes coroutines, optional static typing, and a user-friendly syntax.
+Encompasses coroutines, optional static typing, a user-friendly syntax, and other advanced capabilities.
 
 ### Standard Library & Modules
 Provides a core library, with the ability to import and extend functionality through custom modules.

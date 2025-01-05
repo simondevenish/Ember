@@ -139,5 +139,7 @@ RuntimeValue builtin_debug(Environment* env, RuntimeValue* args, int arg_count);
 RuntimeValue builtin_rand_int(Environment* env, RuntimeValue* args, int arg_count);
 RuntimeValue builtin_rand_choice(Environment* env, RuntimeValue* args, int arg_count);
 
+// A helper that checks if "ember/sdl" is installed
+bool is_sdl_installed(void);
 
 #endif // BUILTINS_H

@@ -1,10 +1,13 @@
-#include "builtins.h"
-#include "runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
 #include <ctype.h>
+
+#include "builtins.h"
+#include "utils.h"
+#include "runtime.h"
+#include "sdl_module.h"
 
 /**
  * Register all built-in functions to the runtime environment.
@@ -31,6 +34,18 @@ void builtins_register(Environment* env) {
     runtime_register_builtin(env, "to_lower", builtin_to_lower);
     runtime_register_builtin(env, "index_of", builtin_index_of);
     runtime_register_builtin(env, "replace", builtin_replace);
+
+    // --------------------------------------------
+    // Conditionally register the SDL module if installed
+    // --------------------------------------------
+    if (is_sdl_installed()) {
+        sdl_register_builtins(env);
+    }
+}
+
+bool is_sdl_installed(void)
+{
+    return utils_is_package_installed("ember/sdl");
 }
 
 RuntimeValue builtin_floor(Environment* env, RuntimeValue* args, int arg_count) {

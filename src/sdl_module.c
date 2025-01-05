@@ -192,8 +192,8 @@ RuntimeValue builtin_sdl_quit(Environment* env, RuntimeValue* args, int arg_coun
 void sdl_register_builtins(Environment* env)
 {
     // Register each function under "sdl.init", "sdl.createWindow", etc.
-    runtime_register_builtin(env, "sdl.init",         builtin_sdl_init);
-    runtime_register_builtin(env, "sdl.createWindow", builtin_sdl_create_window);
-    runtime_register_builtin(env, "sdl.pollEvents",   builtin_sdl_poll_events);
-    runtime_register_builtin(env, "sdl.quit",         builtin_sdl_quit);
+    runtime_register_builtin(env, "sdl_init",         builtin_sdl_init);
+    runtime_register_builtin(env, "sdl_createWindow", builtin_sdl_create_window);
+    runtime_register_builtin(env, "sdl_pollEvents",   builtin_sdl_poll_events);
+    runtime_register_builtin(env, "sdl_quit",         builtin_sdl_quit);
 }

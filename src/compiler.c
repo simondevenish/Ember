@@ -327,51 +327,106 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             patch_jump(chunk, loopEndJump);
             break;
         }
-        case AST_IMPORT: {
-            const char* filename = node->import_stmt.import_path;
+       case AST_IMPORT: {
+            // The raw import path from the AST node (e.g. "my_script.ember" or "ember/net")
+            const char* raw_path = node->import_stmt.import_path;
 
-            // 1) Read file
-            char* import_source = read_file(filename);
-            if (!import_source) {
-                fprintf(stderr, "Compiler error: Could not open import file '%s'\n", filename);
-                return;
+            // ------------------------------------------------------------------
+            // 1) Determine if 'raw_path' ends with ".ember" -> local file import
+            // ------------------------------------------------------------------
+            bool isLocalFile = false;
+            {
+                const char* dotEmber = strstr(raw_path, ".ember");
+                if (dotEmber != NULL) {
+                    // If ".ember" appears at the end of raw_path
+                    size_t full_len = strlen(raw_path);
+                    size_t dot_pos  = (size_t)(dotEmber - raw_path); 
+                    if (dot_pos + 6 == full_len) {
+                        // The last 6 chars match ".ember"
+                        isLocalFile = true;
+                    }
+                }
             }
 
-            // 2) Lex & parse => build an AST
-            Lexer import_lexer;
-            lexer_init(&import_lexer, import_source);
-            Parser* import_parser = parser_create(&import_lexer);
-            ASTNode* import_root = parse_script(import_parser);
+            // ------------------------------------------------------------------
+            // 2) Local ".ember" file import
+            // ------------------------------------------------------------------
+            if (isLocalFile) {
+                // Attempt to read and parse the local file
+                char* import_source = read_file(raw_path);
+                if (!import_source) {
+                    fprintf(stderr, 
+                            "Compiler error: Could not open local import file '%s'\n", 
+                            raw_path);
+                    return;
+                }
 
-            if (!import_root) {
-                fprintf(stderr, "Compiler error: Parsing '%s' failed.\n", filename);
+                // Lex & parse => build an AST
+                Lexer import_lexer;
+                lexer_init(&import_lexer, import_source);
+                Parser* import_parser = parser_create(&import_lexer);
+                ASTNode* import_root = parse_script(import_parser);
+
+                if (!import_root) {
+                    fprintf(stderr, 
+                            "Compiler error: Parsing '%s' failed.\n", 
+                            raw_path);
+                    free(import_parser);
+                    free(import_source);
+                    return;
+                }
+
+                // Compile the newly parsed AST into *this* chunk & symtab
+                bool ok = compile_ast(import_root, chunk, symtab);
+                if (!ok) {
+                    fprintf(stderr, 
+                            "Compiler error: Sub-compile for '%s' failed.\n", 
+                            raw_path);
+                }
+
+                // If the last byte is OP_EOF, remove it to avoid polluting main chunk
+                if (chunk->code_count > 0 &&
+                    chunk->code[chunk->code_count - 1] == OP_EOF)
+                {
+                    chunk->code_count--;
+                }
+
+                // Cleanup
+                free_ast(import_root);
                 free(import_parser);
                 free(import_source);
-                return;
             }
-            
-            // 3) Compile the new AST into *this same* chunk + symtab
-            bool ok = compile_ast(import_root, chunk, symtab);
-            if (!ok) {
-                fprintf(stderr, "Compiler error: Sub-compile for '%s' failed.\n", filename);
+            else {
+                // ------------------------------------------------------------------
+                // 3) Module import (e.g., "ember/net", "raylib/2d", etc.)
+                // ------------------------------------------------------------------
+                // (A) Optionally check if installed using utils_is_package_installed
+                // (B) If not installed -> compiler error or warning
+                // (C) If installed or ignoring checks -> do nothing (no file compilation),
+                //     since the module is presumably built-in or available at runtime.
+
+                // Example logic:
+                // If you skip the check, just log:
+                // fprintf(stdout, "Importing module '%s' (no .ember extension)\n", raw_path);
+
+                // But let's do a minimal installed check:
+                if (!utils_is_package_installed(raw_path)) {
+                    // Not installed => treat as error
+                    fprintf(stderr, 
+                            "Compiler error: Module '%s' is not installed (no local .ember found).\n",
+                            raw_path);
+                }
+                else {
+                    // Successfully found in local registry, so skip file compilation.
+                    fprintf(stdout, 
+                            "[Import] Found installed module '%s'. No local file to compile.\n",
+                            raw_path);
+                }
             }
 
-            // 4) **Remove final OP_EOF** if present
-            if (chunk->code_count > 0 &&
-                chunk->code[chunk->code_count - 1] == OP_EOF)
-            {
-                chunk->code_count--;
-            }
-
-            // 5) Cleanup
-            free_ast(import_root);
-            free(import_parser);
-            free(import_source);
-
-            // no code needed at runtime => we just physically merged it
+            // No additional code emitted for the import statement itself
             break;
         }
-
         case AST_FOR_LOOP: {
             // for (init; cond; inc) { body }
             // compile init

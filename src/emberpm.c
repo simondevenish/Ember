@@ -64,6 +64,7 @@ static char* emberpm_read_file(const char* path) {
         return NULL;
     }
     rewind(f);
+
     char* buf = (char*)malloc(sz + 1);
     if (!buf) {
         fclose(f);
@@ -104,13 +105,13 @@ static EmberPackageList emberpm_read_registry(void) {
     result.count = 0;
     result.pkgs = NULL;
 
-    // Build path: e.g. ~/.ember/pm/packages.json
+    // Build path: e.g. ./.ember/pm/packages.json
     char regPath[1024];
     snprintf(regPath, sizeof(regPath), "%s/%s", emberpm_get_local_dir(), EMBERPM_REGISTRY);
 
     char* json = emberpm_read_file(regPath);
     if (!json) {
-        // No registry or failed to read => we treat it as empty
+        // No registry or failed to read => treat as empty
         return result;
     }
 
@@ -119,22 +120,21 @@ static EmberPackageList emberpm_read_registry(void) {
     char* pkgsKey = strstr(json, "\"packages\"");
     if (!pkgsKey) {
         free(json);
-        return result;  // no "packages" key found
+        return result;
     }
     char* bracket = strchr(pkgsKey, '[');
     if (!bracket) {
         free(json);
         return result;
     }
-    // Now bracket points to '[' for the array of packages
-    // We'll parse each object until ']'.
+    // bracket points to '[' for array of packages
     char* endArr = strchr(bracket, ']');
     if (!endArr) {
         free(json);
         return result;
     }
 
-    // We'll copy out just that portion:
+    // Copy out just that portion
     size_t arrLen = (size_t)(endArr - bracket + 1);
     char* arrBuf = (char*)malloc(arrLen + 1);
     if (!arrBuf) {
@@ -144,15 +144,13 @@ static EmberPackageList emberpm_read_registry(void) {
     strncpy(arrBuf, bracket, arrLen);
     arrBuf[arrLen] = '\0';
 
-    // Now parse each object like: {"name":"X","version":"Y"}
-    // We'll do a super naive approach: find each {"name":..., "version":...}
-    // Count occurrences
+    // Parse each {"name":"X","version":"Y"} object
     char* cursor = arrBuf;
     const int MAX_PACKS = 100;  // arbitrary
     EmberPackage* temp = (EmberPackage*)malloc(sizeof(EmberPackage) * MAX_PACKS);
     if (!temp) {
-        free(json);
         free(arrBuf);
+        free(json);
         return result;
     }
     size_t idx = 0;
@@ -165,12 +163,11 @@ static EmberPackageList emberpm_read_registry(void) {
         if (!objEnd) break;
 
         // extract name
-        // look for "name":" => skip 7 chars => read until next quote
         char* nmKey = strstr(objStart, "\"name\"");
         if (!nmKey || nmKey > objEnd) break;
         char* nmVal = strstr(nmKey, ":\"");
         if (!nmVal || nmVal > objEnd) break;
-        nmVal += 2; // skip :"
+        nmVal += 2; // skip `:"`
         char nameBuf[256] = {0};
         int n = 0;
         while (*nmVal && *nmVal != '"' && nmVal < objEnd && n < 255) {
@@ -179,7 +176,6 @@ static EmberPackageList emberpm_read_registry(void) {
         nameBuf[n] = '\0';
 
         // extract version
-        // look for "version":" => skip
         char versionBuf[64] = {0};
         char* verKey = strstr(objStart, "\"version\"");
         if (verKey && verKey < objEnd) {
@@ -194,7 +190,6 @@ static EmberPackageList emberpm_read_registry(void) {
             }
         }
 
-        // store in temp
         strncpy(temp[idx].name, nameBuf, 255);
         strncpy(temp[idx].version, versionBuf, 63);
 
@@ -204,11 +199,10 @@ static EmberPackageList emberpm_read_registry(void) {
         cursor = objEnd + 1; // move past current object
     }
 
-    // finalize
     if (idx > 0) {
         result.count = idx;
         result.pkgs = (EmberPackage*)malloc(sizeof(EmberPackage) * idx);
-        memcpy(result.pkgs, temp, sizeof(EmberPackage) * idx);
+        memcpy(result.pkgs, temp, idx * sizeof(EmberPackage));
     }
 
     free(temp);
@@ -221,25 +215,20 @@ static EmberPackageList emberpm_read_registry(void) {
  * @brief Write the given list of packages to the registry file in JSON format.
  */
 static void emberpm_write_registry(const EmberPackageList* pkgList) {
-    // We'll build a JSON string
-    // {
-    //   "packages":[
-    //     {"name":"X","version":"Y"},
-    //     ...
-    //   ]
-    // }
-
-    // Very naive string building
-    char* jsonBuf = (char*)malloc(10 * 1024);  // up to 10 KB
+    // Build a JSON string
+    char* jsonBuf = (char*)malloc(10 * 1024); // up to 10KB
     if (!jsonBuf) return;
     strcpy(jsonBuf, "{\n  \"packages\":[\n");
 
     for (size_t i = 0; i < pkgList->count; i++) {
         char line[512];
-        snprintf(line, sizeof(line),
-                 "    {\"name\":\"%s\",\"version\":\"%s\"}",
-                 pkgList->pkgs[i].name,
-                 pkgList->pkgs[i].version[0] ? pkgList->pkgs[i].version : "0.0.0");
+        snprintf(
+            line, 
+            sizeof(line),
+            "    {\"name\":\"%s\",\"version\":\"%s\"}",
+            pkgList->pkgs[i].name,
+            (pkgList->pkgs[i].version[0] ? pkgList->pkgs[i].version : "0.0.0")
+        );
 
         strcat(jsonBuf, line);
         if (i + 1 < pkgList->count) strcat(jsonBuf, ",\n");
@@ -247,7 +236,7 @@ static void emberpm_write_registry(const EmberPackageList* pkgList) {
     }
     strcat(jsonBuf, "  ]\n}\n");
 
-    // write to disk
+    // Write to disk
     char regPath[1024];
     snprintf(regPath, sizeof(regPath), "%s/%s", emberpm_get_local_dir(), EMBERPM_REGISTRY);
     emberpm_write_file(regPath, jsonBuf);
@@ -277,7 +266,6 @@ static int emberpm_cmd_install(const char* packageName) {
         return 1;
     }
 
-    // Load current registry
     EmberPackageList reg = emberpm_read_registry();
 
     // Check if already installed
@@ -292,10 +280,7 @@ static int emberpm_cmd_install(const char* packageName) {
 
     printf("Installing package '%s'...\n", packageName);
 
-    // Download or copy placeholder
-    // e.g., create a subdir under .ember/pm/<packageName> ?
-
-    // Expand the list by 1
+    // Expand the registry by 1
     EmberPackageList newReg;
     newReg.count = reg.count + 1;
     newReg.pkgs = (EmberPackage*)malloc(sizeof(EmberPackage) * newReg.count);
@@ -307,12 +292,11 @@ static int emberpm_cmd_install(const char* packageName) {
 
     // add new
     strncpy(newReg.pkgs[reg.count].name, packageName, 255);
-    strncpy(newReg.pkgs[reg.count].version, "0.1.0", 63); // placeholder
+    strncpy(newReg.pkgs[reg.count].version, "0.1.0", 63); // placeholder version
 
-    // free old reg
     free(reg.pkgs);
 
-    // Write
+    // Write out
     emberpm_write_registry(&newReg);
     free(newReg.pkgs);
 
@@ -325,7 +309,7 @@ static int emberpm_cmd_uninstall(const char* packageName) {
         fprintf(stderr, "Error: Could not access local Ember PM directory.\n");
         return 1;
     }
-    // load registry
+
     EmberPackageList reg = emberpm_read_registry();
     int idx = emberpm_find_package_index(&reg, packageName);
     if (idx < 0) {
@@ -344,19 +328,19 @@ static int emberpm_cmd_uninstall(const char* packageName) {
         newReg.pkgs = (EmberPackage*)malloc(sizeof(EmberPackage) * newReg.count);
         size_t j = 0;
         for (size_t i = 0; i < reg.count; i++) {
-            if ((int)i == idx) continue; // skip
+            if ((int)i == idx) continue; 
             newReg.pkgs[j++] = reg.pkgs[i];
         }
     }
     free(reg.pkgs);
 
-    // remove local files? e.g. .ember/pm/ember/net
-    // We'll do a minimal approach
-    char path[1024];
-    snprintf(path, sizeof(path), "%s/%s", emberpm_get_local_dir(), packageName);
-    // TODO: remove directory if it exists
+    // (Optional) remove local files ./.ember/pm/<packageName>, if needed
+    // e.g.:
+    // char path[1024];
+    // snprintf(path, sizeof(path), "%s/%s", emberpm_get_local_dir(), packageName);
+    // remove directory or files if you like
 
-    // Write out new
+    // Write out new registry
     emberpm_write_registry(&newReg);
     free(newReg.pkgs);
 
@@ -403,7 +387,6 @@ static int emberpm_cmd_search(const char* term) {
         printf("No matches found in local registry.\n");
     }
 
-    // For a real “remote” search, you'd do an HTTP request to a package registry.
     free(reg.pkgs);
     return 0;
 }
@@ -429,16 +412,14 @@ int main(int argc, char** argv) {
             fprintf(stderr, "Error: 'install' requires a package name.\n");
             return 1;
         }
-        const char* packageName = argv[2];
-        return emberpm_cmd_install(packageName);
+        return emberpm_cmd_install(argv[2]);
     }
     else if (strcmp(command, "uninstall") == 0) {
         if (argc < 3) {
             fprintf(stderr, "Error: 'uninstall' requires a package name.\n");
             return 1;
         }
-        const char* packageName = argv[2];
-        return emberpm_cmd_uninstall(packageName);
+        return emberpm_cmd_uninstall(argv[2]);
     }
     else if (strcmp(command, "list") == 0) {
         return emberpm_cmd_list();
@@ -448,8 +429,7 @@ int main(int argc, char** argv) {
             fprintf(stderr, "Error: 'search' requires a term.\n");
             return 1;
         }
-        const char* term = argv[2];
-        return emberpm_cmd_search(term);
+        return emberpm_cmd_search(argv[2]);
     }
     else {
         fprintf(stderr, "Error: Unknown command '%s'\n\n", command);
@@ -485,27 +465,38 @@ static void print_usage(void) {
 }
 
 /**
- * @brief Return the path to the user's local Ember PM directory.
- *        For example: ~/.ember/pm/ on POSIX systems, 
- *        or %USERPROFILE%\\.ember\\pm on Windows.
+ * @brief Return the path to the project's local Ember PM directory.
+ *        For example: ./.ember/pm/ on both POSIX and Windows
  */
 static const char* emberpm_get_local_dir(void) {
+    // We return a static buffer that points to ".ember/pm"
+    // But first ensure that ".ember" and ".ember/pm" exist.
+    static char pathBuf[1024];
+
 #ifdef _WIN32
-    // On Windows, you might use %APPDATA% or something like that
-    const char* home = getenv("USERPROFILE");
-    if (!home) home = "C:\\Users\\Default";
-    static char pathBuf[1024];
-    snprintf(pathBuf, sizeof(pathBuf), "%s\\.ember\\pm", home);
-    return pathBuf;
+    // On Windows, we want to create ".ember" and then ".ember\\pm"
+    // For simplicity, just do two mkdir calls in sequence.
+    if (_mkdir(".ember") != 0 && errno != EEXIST) {
+        fprintf(stderr, "Warning: Failed to create directory '.ember' (errno=%d)\n", errno);
+    }
+    if (_mkdir(".ember\\pm") != 0 && errno != EEXIST) {
+        fprintf(stderr, "Warning: Failed to create directory '.ember\\pm' (errno=%d)\n", errno);
+    }
+    snprintf(pathBuf, sizeof(pathBuf), ".ember\\pm");
 #else
-    // On Linux/macOS, use $HOME
-    const char* home = getenv("HOME");
-    if (!home) home = "/tmp";  // fallback
-    static char pathBuf[1024];
-    snprintf(pathBuf, sizeof(pathBuf), "%s/.ember/pm", home);
-    return pathBuf;
+    // On Unix-like systems, create ".ember" and then ".ember/pm"
+    if (mkdir(".ember", 0755) != 0 && errno != EEXIST) {
+        fprintf(stderr, "Warning: Failed to create directory '.ember' (errno=%d)\n", errno);
+    }
+    if (mkdir(".ember/pm", 0755) != 0 && errno != EEXIST) {
+        fprintf(stderr, "Warning: Failed to create directory '.ember/pm' (errno=%d)\n", errno);
+    }
+    snprintf(pathBuf, sizeof(pathBuf), ".ember/pm");
 #endif
+
+    return pathBuf;
 }
+
 
 /**
  * @brief Ensure that the local Ember PM directory exists. Create if needed.
@@ -514,20 +505,17 @@ static bool emberpm_ensure_local_dir(void) {
     const char* dir = emberpm_get_local_dir();
 
 #ifdef _WIN32
-    // On Windows, mkdir creates one level only
+    // mkdir creates one level only
     if (mkdir(dir) != 0) {
-        // If fails but directory already exists => ignore
-        // Otherwise handle error
         if (errno != EEXIST) {
             // Some error other than "already exists"
-            // Could check `_access(dir, 0)` or similar
+            return false;
         }
     }
 #else
-    // On POSIX
     if (mkdir(dir, 0755) != 0) {
         if (errno != EEXIST) {
-            // Some error other than "already exists"
+            return false;
         }
     }
 #endif

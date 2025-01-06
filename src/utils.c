@@ -12,7 +12,7 @@
 #include <direct.h>  // For _mkdir on Windows
 #define mkdir(path, mode) _mkdir(path)
 #else
-#include <unistd.h>
+#include <unistd.h>  // For getcwd, etc. on POSIX
 #endif
 
 // -----------------------------------------------------------------------------
@@ -60,36 +60,35 @@ char* read_file(const char* filename)
 }
 
 // -----------------------------------------------------------------------------
-// Helper: Return the user's local Ember PM directory (e.g. ~/.ember/pm/).
-// This is basically the same logic used in emberpm_get_local_dir().
+// Return the path to the local .ember/pm/ directory in the current project.
+// For example, if the user is in /MyProject, the result is /MyProject/.ember/pm.
 // -----------------------------------------------------------------------------
-static const char* get_local_pm_dir(void) {
-#ifdef _WIN32
-    // On Windows, might use %APPDATA% or similar, but here's a sample:
-    const char* home = getenv("USERPROFILE");
-    if (!home) home = "C:\\Users\\Default";
+static const char* get_local_pm_dir(void) 
+{
     static char pathBuf[1024];
-    snprintf(pathBuf, sizeof(pathBuf), "%s\\.ember\\pm", home);
+    char cwd[512];
+
+    // Get the current working directory
+    if (!getcwd(cwd, sizeof(cwd))) {
+        // Fallback if getcwd fails
+        strcpy(cwd, ".");
+    }
+
+    // Example: /path/to/project/.ember/pm
+    snprintf(pathBuf, sizeof(pathBuf), "%s/.ember/pm", cwd);
     return pathBuf;
-#else
-    // On POSIX
-    const char* home = getenv("HOME");
-    if (!home) home = "/tmp"; // fallback
-    static char pathBuf[1024];
-    snprintf(pathBuf, sizeof(pathBuf), "%s/.ember/pm", home);
-    return pathBuf;
-#endif
 }
 
 // -----------------------------------------------------------------------------
 // Implementation of utils_read_installed_packages()
 // -----------------------------------------------------------------------------
-EmberPackageList utils_read_installed_packages(void) {
+EmberPackageList utils_read_installed_packages(void) 
+{
     EmberPackageList result;
     result.count = 0;
     result.pkgs = NULL;
 
-    // Build path: e.g. ~/.ember/pm/packages.json
+    // Build path for ./[project]/.ember/pm/packages.json
     char regPath[1024];
     snprintf(regPath, sizeof(regPath), "%s/packages.json", get_local_pm_dir());
 
@@ -143,9 +142,13 @@ EmberPackageList utils_read_installed_packages(void) {
     char* cursor = arrBuf;
     while (1) {
         char* objStart = strstr(cursor, "{\"name\"");
-        if (!objStart || objStart >= endArr) {
+        if (!objStart) {
             break;
         }
+        if (objStart >= endArr) {
+            break;
+        }
+
         char* objEnd = strchr(objStart, '}');
         if (!objEnd) {
             break;
@@ -157,6 +160,7 @@ EmberPackageList utils_read_installed_packages(void) {
         char* nmVal = strstr(nmKey, ":\"");
         if (!nmVal || nmVal > objEnd) break;
         nmVal += 2; // skip :"
+        
         char nameBuf[256];
         memset(nameBuf, 0, sizeof(nameBuf));
         int n = 0;
@@ -208,7 +212,8 @@ EmberPackageList utils_read_installed_packages(void) {
 // -----------------------------------------------------------------------------
 // Implementation of utils_is_package_installed(packageName)
 // -----------------------------------------------------------------------------
-bool utils_is_package_installed(const char* packageName) {
+bool utils_is_package_installed(const char* packageName) 
+{
     EmberPackageList pkgList = utils_read_installed_packages();
     if (pkgList.count == 0 || !pkgList.pkgs) {
         return false;

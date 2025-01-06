@@ -930,42 +930,46 @@ ASTNode* parse_import_statement(Parser* parser)
         return NULL;
     }
 
-    // 2) Now we expect an identifier (or you could allow string, if you prefer)
+    // 2) Now we expect at least one identifier (e.g. "ember" or "my_file.ember"),
+    //    but we also allow further punctuation segments (".", "/").
     if (parser->current_token.type != TOKEN_IDENTIFIER) {
         char msg[128];
         snprintf(msg, sizeof(msg),
-            "Expected identifier after 'import', got token type=%d val='%s'",
+            "Expected module or file identifier after 'import', got token type=%d val='%s'",
             parser->current_token.type,
             parser->current_token.value ? parser->current_token.value : "(null)");
         report_error(parser, msg);
         return NULL;
     }
 
-    // Start our import_path with the first identifier
+    // Initialize our import_path with the first identifier
     char* import_path = strdup(parser->current_token.value);
     if (!import_path) {
-        report_error(parser, "Memory allocation failed for import path");
+        report_error(parser, "Memory allocation failed for import_path");
         return NULL;
     }
     parser_advance(parser); // consume the first identifier
 
-    // 3) While we see a '.', consume it then expect another identifier
+    // 3) While we see punctuation of "." or "/", consume it and the next identifier
+    //    This allows "ember/sdl" or "foo.bar.baz" style imports.
     while (parser->current_token.type == TOKEN_PUNCTUATION &&
-           strcmp(parser->current_token.value, ".") == 0)
+           (strcmp(parser->current_token.value, ".") == 0 ||
+            strcmp(parser->current_token.value, "/") == 0))
     {
-        // Skip the '.'
-        parser_advance(parser);
+        // Save the punctuation char ('.' or '/')
+        char punct = parser->current_token.value[0]; 
+        parser_advance(parser); // consume '.' or '/'
 
-        // Next token must be another identifier
+        // The next token must be another identifier
         if (parser->current_token.type != TOKEN_IDENTIFIER) {
-            report_error(parser, "Expected identifier after '.' in import path");
+            report_error(parser, "Expected identifier after punctuation in import path");
             free(import_path);
             return NULL;
         }
 
-        // Append ".identifier" to import_path
+        // Appendpunct + identifier to import_path
         size_t old_len = strlen(import_path);
-        size_t extra_len = strlen(parser->current_token.value) + 2; // +1 for '.' +1 for '\0'
+        size_t extra_len = strlen(parser->current_token.value) + 2; // punct + identifier + '\0'
         char* new_path = (char*)malloc(old_len + extra_len);
         if (!new_path) {
             report_error(parser, "Memory allocation failed while appending to import path");
@@ -973,12 +977,14 @@ ASTNode* parse_import_statement(Parser* parser)
             return NULL;
         }
 
-        sprintf(new_path, "%s.%s", import_path, parser->current_token.value);
+        // e.g., if punct='.', then "oldpath.identifier"
+        //        if punct='/', then "oldpath/identifier"
+        sprintf(new_path, "%s%c%s", import_path, punct, parser->current_token.value);
+
         free(import_path);
         import_path = new_path;
 
-        // Advance past this identifier
-        parser_advance(parser);
+        parser_advance(parser); // consume the identifier
     }
 
     // 4) Expect a semicolon to close the import statement
@@ -999,6 +1005,7 @@ ASTNode* parse_import_statement(Parser* parser)
 
     return node;
 }
+
 
 ASTNode* parse_if_statement(Parser* parser) {
     // Ensure the statement starts with the "if" keyword

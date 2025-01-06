@@ -45,7 +45,8 @@ void builtins_register(Environment* env) {
 
 bool is_sdl_installed(void)
 {
-    return utils_is_package_installed("ember/sdl");
+    // ember/sdl -> embersdl quick hack to test functionality whilst '/' gets fixed
+    return utils_is_package_installed("embersdl");
 }
 
 RuntimeValue builtin_floor(Environment* env, RuntimeValue* args, int arg_count) {

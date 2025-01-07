@@ -1,0 +1,57 @@
+// future_syntax.ember
+
+// This file demonstrates the target syntax for Ember in the future
+
+use "network.ember"       // import modules
+module epicAdventure {
+  val MAX_HEALTH = 100
+}
+
+var isGameRunning = true
+
+trait MagicalBeing {
+  fn castSpell(spell) {
+    print(this.name + " casts " + spell + "!")
+  }
+}
+
+var player = {
+  name: "Adventurer",
+  health: 50,
+  inventory: ["Sword", "Potion"],
+
+  // A function property inside the object
+  greet: fn() {
+    print("Greetings, " + this.name + "!")
+  }
+}
+
+mixin(player, MagicalBeing)
+
+fn checkHealth(h) {
+  match (h) {
+    case 0 {
+      print("You are dead!")
+      isGameRunning = false
+    }
+    case ..20 {
+      print("Severely injured!")
+    }
+    default {
+      print("Health = " + h)
+    }
+  }
+}
+
+// Start
+print("Player health starts at " + player.health)
+player.greet()          // calling the in-object function
+player.castSpell("Fireball")
+player.health -= 60
+checkHealth(player.health)
+
+if !isGameRunning {
+  print("Game Over!")
+} else {
+  print("Still alive, continue the adventure!")
+}

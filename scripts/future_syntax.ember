@@ -1,57 +1,124 @@
+//
 // future_syntax.ember
+//
 
-// This file demonstrates the target syntax for Ember in the future
+// 1) Import a module and declare a module namespace
+use "network.ember"
 
-use "network.ember"       // import modules
 module epicAdventure {
-  val MAX_HEALTH = 100
+  val START_GOLD = 10
 }
 
-var isGameRunning = true
+// 2) Demonstrate creation vs. assignment
+var isGameRunning: true    // Created with ':', initially true
 
-trait MagicalBeing {
-  fn castSpell(spell) {
+// Some small example objects (tables) that we'll mix in or reassign
+var MagicalBeing: {
+  castSpell: fn(spell) {
     print(this.name + " casts " + spell + "!")
   }
 }
 
-var player = {
-  name: "Adventurer",
-  health: 50,
-  inventory: ["Sword", "Potion"],
+var InventorySystem: {
+  checkInventory: fn() {
+    print(this.name + " has => " + this.inventory)
+  }
+}
 
-  // A function property inside the object
+// Another object that might replace an existing mixin
+var Explorer: {
+  explore: fn() {
+    print(this.name + " explores the unknown lands!")
+  }
+}
+
+// A new table that might be *added* as a new mixin slot
+var KnightBehavior: {
+  defend: fn() {
+    print(this.name + " raises a mighty shield to defend!")
+  }
+}
+
+// 3) Create a player object using colon-syntax + initial mixin references
+var player: {
+  :[MagicalBeing, InventorySystem]  // Mix in MagicalBeing & InventorySystem
+  name: "Adventurer"
+  health: 50
+  inventory: ["Sword", "Potion"]
+
   greet: fn() {
-    print("Greetings, " + this.name + "!")
+    print("Hello, I'm " + this.name)
   }
 }
 
-mixin(player, MagicalBeing)
+// Basic usage
+player.greet()
+player.checkInventory()
+player.castSpell("Arcane Bolt")
 
-fn checkHealth(h) {
-  match (h) {
-    case 0 {
-      print("You are dead!")
-      isGameRunning = false
-    }
-    case ..20 {
-      print("Severely injured!")
-    }
-    default {
-      print("Health = " + h)
+// 4) Further demonstration of creation vs. assignment
+var gold: 5
+print("Gold initially => " + gold)
+
+gold = 12
+print("Gold after reassignment => " + gold)
+
+// 5) Show reassigning the first mixin of 'player' to something else
+//    (index 0 was originally MagicalBeing)
+player[0] = Explorer
+
+// Now 'player' no longer has castSpell, but it does have Explorer.explore
+player.explore()
+
+// 6) Add a brand new mixin at the next slot via '+:' operator
+//    We had indexes [0]=Explorer, [1]=InventorySystem. Next slot is index=2.
+player +: KnightBehavior
+
+player.defend()  // from KnightBehavior
+
+// 7) A “covered” iterator with break-out and filter
+//    Collect squares of even numbers from 1..10, but stop if >= 8
+let evenSquares = [
+  (n*n): n: 1 to 11 {
+    print("Visiting => " + n)
+    if (n >= 8) {
+      print("Reached 8 -> break!")
+      break
     }
   }
+  if (n % 2 == 0)  // filter out odd numbers
+]
+print("Collected even squares until 8 => " + evenSquares)
+
+// 8) A “naked” iterator for side effects only
+i: 0 to 3 {
+  print("Day " + i + " => Foraging around camp...")
 }
 
-// Start
-print("Player health starts at " + player.health)
-player.greet()          // calling the in-object function
-player.castSpell("Fireball")
-player.health -= 60
-checkHealth(player.health)
-
-if !isGameRunning {
-  print("Game Over!")
-} else {
-  print("Still alive, continue the adventure!")
+// 9) Demonstrate table assignment
+var dayInfo: {
+  weather: "sunny"
 }
+var secondDay: {
+  weather: "rainy"
+  event: "Found hidden treasure"
+}
+
+print("Day #1 => weather=" + dayInfo.weather)
+dayInfo = secondDay
+print("Now dayInfo => weather=" + dayInfo.weather + ", event=" + dayInfo.event)
+
+// 10) Another “covered” iterator used purely for side effects on `player.health`
+[
+  step: 1 to 5 {
+    player.health -= 10
+    print("Step " + step + " => " + player.name + " has " + player.health + " HP")
+    if (player.health <= 0) {
+      print(player.name + " collapsed!")
+      break
+    }
+  }
+]
+
+// End
+print("=== End of future_syntax.ember ===")

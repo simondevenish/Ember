@@ -12,7 +12,7 @@
 use "network.ember"
 
 module epicAdventure:
-  val START_GOLD = 10
+  val START_GOLD: 10
 
 
 // 2) Demonstrate creation vs. assignment

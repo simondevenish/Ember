@@ -1,35 +1,50 @@
 //
 // future_syntax.ember
 //
-
-// One of my main objectives with this new syntax is to:
-// 1. reduce the amount of typing required - I want to get to building things quicker, whilst code is readable. The goal is results not writing reams of complex code
-// 2. less text to read - once familiar with the syntax and approach, easier to scan code files
-// 3. Simplicity over complexity - Why write 10 lines of code when we can write 1
-// 4. Greater trust in the programmer - as is evident with naked and covered iterators it is up to the programmer to define loop and conditional logic - no more do/while/for/for each.
+// One of our main objectives with this new syntax is:
+//  1. Reduce the amount of typing required — quickly build things, less boilerplate.
+//  2. Less text to read — easier scanning once the syntax is familiar.
+//  3. Simplicity over complexity — fewer redundant lines, trusting the programmer's logic.
+//  4. No more conventional do/while/for/foreach — we have naked & covered iterators.
 //
+// NOTE: We’re now making all free-standing functions consistently defined as:
+//       myFunctionName: fn() {...}
+//
+// Additionally, we show usage of `var`, `let`, or omitted keywords for variables,
+// though recommended is `var myVar: <value>` or `let myConst: <value>`.
 
+
+// -----------------------------------------------------------------------------
 // 1) Import a module and declare a module namespace (indentation style)
+// -----------------------------------------------------------------------------
 use "network.ember"
 
 module epicAdventure:
-  val START_GOLD: 10
+  var START_GOLD: 10
 
 
+// -----------------------------------------------------------------------------
 // 2) Demonstrate creation vs. assignment
 //    Using colon (':') for creation with initial value
-//    Also show we can define function bodies with braces OR indentation
+// -----------------------------------------------------------------------------
 var isGameRunning: true   // Created with ':', initially true
 
+// You can also omit `var` or `let`; it defaults to var. 
+// But we recommend `var foo: 0` for clarity.
+foo: 0
+
+// Another example: (We can also do "var foo: 0" or "let foo: 0".)
+var sampleNum: 42
+
 // Show a small function defined with indentation-based body:
-fn showGameState()
+showGameState: fn()
   if isGameRunning
     print("Game is running!")
   el
     print("Game is stopped...")
 
-// And a function using braces:
-fn toggleGameRunning() {
+// And a function using braces, but still defined as `toggleGameRunning: fn()`
+toggleGameRunning: fn() {
   isGameRunning = !isGameRunning
   print("Toggled isGameRunning => " + isGameRunning)
 }
@@ -41,14 +56,17 @@ toggleGameRunning()
 showGameState()
 
 
+// -----------------------------------------------------------------------------
 // Additional global variables for our event example
-// creation with colon-syntax
+// -----------------------------------------------------------------------------
 var isNightTime: false
 var monsterCount: 2
 
 
-// Some small example objects (tables) that we'll mix in or reassign
-// (Indentation-based table syntax)
+// -----------------------------------------------------------------------------
+// 3) Some small example objects (tables) that we'll mix in or reassign
+//    (Indentation-based table syntax)
+// -----------------------------------------------------------------------------
 var MagicalBeing:
   castSpell: fn(spell)
     print(this.name + " casts " + spell + "!")
@@ -71,8 +89,10 @@ var KnightBehavior:
     print(this.name + " raises a mighty shield to defend!")
 
 
-// 3) Create a player object using colon-syntax + initial mixin references
+// -----------------------------------------------------------------------------
+// 4) Create a player object using colon-syntax + initial mixin references
 //    Demonstrate indentation style, plus a portion with braces
+// -----------------------------------------------------------------------------
 var player:
   :[MagicalBeing, InventorySystem]  // Mix in MagicalBeing & InventorySystem
   name: "Adventurer"
@@ -116,17 +136,21 @@ var townGuard:
 
 
 // A free-floating event-bound function, triggered by "MonsterAlert" for all
-fn monsterAlertGlobal() <- [ "MonsterAlert".filter("all") ]
+monsterAlertGlobal: fn() <- [ "MonsterAlert".filter("all") ]
   print("A global event function: 'MonsterAlert' => entire region is on alert!")
 
 
+// -----------------------------------------------------------------------------
 // Basic usage with the existing mixins
+// -----------------------------------------------------------------------------
 player.greet()
 player.checkInventory()
 player.castSpell("Arcane Bolt")
 
 
-// 4) Further demonstration of creation vs. assignment
+// -----------------------------------------------------------------------------
+// 5) Further demonstration of creation vs. assignment
+// -----------------------------------------------------------------------------
 var gold: 5
 print("Gold initially => " + gold)
 
@@ -134,22 +158,26 @@ gold = 12
 print("Gold after reassignment => " + gold)
 
 
-// 5) Show reassigning the first mixin of 'player' to something else
+// -----------------------------------------------------------------------------
+// 6) Show reassigning the first mixin of 'player' to something else
 //    (index 0 was originally MagicalBeing)
+// -----------------------------------------------------------------------------
 player[0] = Explorer
-
-// Now 'player' no longer has castSpell, but it does have Explorer.explore
-player.explore()
+player.explore()  // Now 'player' no longer has castSpell, but does have Explorer.explore
 
 
-// 6) Add a brand new mixin at the next slot via '+:' operator
+// -----------------------------------------------------------------------------
+// 7) Add a brand new mixin at the next slot via '+:' operator
 //    We had indexes [0]=Explorer, [1]=InventorySystem. Next slot is index=2.
+// -----------------------------------------------------------------------------
 player +: KnightBehavior
 player.defend()  // from KnightBehavior
 
 
-// 7) A “covered” iterator with break-out and filter
+// -----------------------------------------------------------------------------
+// 8) A “covered” iterator with break-out and filter
 //    Collect squares of even numbers from 1..10, but stop if >= 8
+// -----------------------------------------------------------------------------
 let evenSquares = [
   (n*n): n: 1 to 11 {
     print("Visiting => " + n)
@@ -163,12 +191,16 @@ let evenSquares = [
 print("Collected even squares until 8 => " + evenSquares)
 
 
-// 8) A “naked” iterator for side effects only (indentation-based block)
+// -----------------------------------------------------------------------------
+// 9) A “naked” iterator for side effects only (indentation-based block)
+// -----------------------------------------------------------------------------
 i: 0 to 3
   print("Day " + i + " => Foraging around camp...")
 
 
-// 9) Demonstrate table assignment
+// -----------------------------------------------------------------------------
+// 10) Demonstrate table assignment
+// -----------------------------------------------------------------------------
 var dayInfo:
   weather: "sunny"
 
@@ -181,7 +213,9 @@ dayInfo = secondDay
 print("Now dayInfo => weather=" + dayInfo.weather + ", event=" + dayInfo.event)
 
 
-// 10) Another “covered” iterator used purely for side effects on `player.health`
+// -----------------------------------------------------------------------------
+// 11) Another “covered” iterator used purely for side effects on `player.health`
+// -----------------------------------------------------------------------------
 [
   step: 1 to 5 {
     player.health -= 10
@@ -194,25 +228,30 @@ print("Now dayInfo => weather=" + dayInfo.weather + ", event=" + dayInfo.event)
 ]
 
 
-// 11) Demonstrate event *invocation*:
-
-fn beginNight():
+// -----------------------------------------------------------------------------
+// 12) Demonstrate event *invocation* as a free-standing function
+// -----------------------------------------------------------------------------
+beginNight: fn()
   isNightTime = true
   print("[BEGIN NIGHT] isNightTime set to true.")
+
   // Now invoke the "NightAlarm" event with a condition block + extra filters
   ()->["NightAlarm" { if isNightTime }].filter("region(Town)").filter("someGroup")
     print("[BEGIN NIGHT] Broadcasting NightAlarm in 'Town' for 'someGroup'!")
 
 
-fn monstersApproach():
+monstersApproach: fn()
   print("Monsters are near! monsterCount => " + monsterCount)
+
   // Invoke "MonsterAlert" with a condition block + filter
   ()->["MonsterAlert" { if monsterCount > 0 }].filter("all") {
     print("[MONSTER ALERT] There is at least one monster nearby!")
   }
 
 
-// 12) Putting it all together
+// -----------------------------------------------------------------------------
+// Putting it all together
+// -----------------------------------------------------------------------------
 print("=== Start of extended event usage ===")
 beginNight()       // triggers "NightAlarm" => player.nightAlert & townGuard.respondAtNight 
 monstersApproach() // triggers "MonsterAlert" => calls 'monsterAlert' on player + global function
@@ -222,8 +261,10 @@ monsterCount = 0
 monstersApproach() // won't trigger player's monsterAlert because condition block checks monsterCount > 0
 
 
+// -----------------------------------------------------------------------------
 // 13) Demonstrate an async + coroutine function using <fn()> + `be` + `yield`
-fn getData: <fn()>:
+// -----------------------------------------------------------------------------
+getData: <fn()>:
   be res: network.httpGet("https://example.com/endpointA")
   print("Response A => " + res)
 
@@ -237,6 +278,31 @@ fn getData: <fn()>:
 print("=== Testing async + coroutine getData() ===")
 getData()
 print("Back from getData() — note that inside the function, we used `yield` so it might be resumed later...")
+
+
+// -----------------------------------------------------------------------------
+// 14) Show usage of `let` vs `var` for functions and variables
+// -----------------------------------------------------------------------------
+
+// 'let' is constant, meaning it cannot re-bind or reassign the name. 
+// e.g. you can't do 'testFunc = somethingElse' if it was declared let. 
+// You can also interpret 'let' as "this function won't mutate the containing object," 
+// if you want that semantic. (Implementation may vary.)
+
+let testFunc: fn()
+  print("I am an immutable reference function. I can't be re-bound to anything else.")
+
+// Another function defaulting to var (since we omitted the keyword):
+anotherTest: fn()
+  print("Hello from 'anotherTest' - we can reassign or remove this if we want.")
+
+// A variable declared with let => cannot be reassigned
+let maxLives: 3
+
+// A variable declared with var => can be reassigned
+var currentLives: maxLives
+currentLives -= 1
+print("After losing one life => currentLives = " + currentLives)
 
 
 // End

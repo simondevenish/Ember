@@ -7,6 +7,7 @@
 // 2. less text to read - once familiar with the syntax and approach, easier to scan code files
 // 3. Simplicity over complexity - Why write 10 lines of code when we can write 1
 // 4. Greater trust in the programmer - as is evident with naked and covered iterators it is up to the programmer to define loop and conditional logic - no more do/while/for/for each.
+//
 
 // 1) Import a module and declare a module namespace (indentation style)
 use "network.ember"
@@ -17,7 +18,7 @@ module epicAdventure:
 
 // 2) Demonstrate creation vs. assignment
 //    Using colon (':') for creation with initial value
-//    Here we also show that you can define function bodies with braces OR indentation
+//    Also show we can define function bodies with braces OR indentation
 var isGameRunning: true   // Created with ':', initially true
 
 // Show a small function defined with indentation-based body:
@@ -38,6 +39,7 @@ showGameState()
 
 toggleGameRunning()
 showGameState()
+
 
 // Additional global variables for our event example
 // creation with colon-syntax
@@ -218,6 +220,24 @@ monstersApproach() // triggers "MonsterAlert" => calls 'monsterAlert' on player 
 print("[Decreasing monsterCount to 0 and trying again]")
 monsterCount = 0
 monstersApproach() // won't trigger player's monsterAlert because condition block checks monsterCount > 0
+
+
+// 13) Demonstrate an async + coroutine function using <fn()> + `be` + `yield`
+fn getData: <fn()>:
+  be res: network.httpGet("https://example.com/endpointA")
+  print("Response A => " + res)
+
+  yield  // suspend the coroutine here (the function returns control to the runtime)
+  print("Resuming getData after yield...")
+
+  res = network.httpGet("https://example.com/endpointB")
+  print("Response B => " + res)
+
+// Call it:
+print("=== Testing async + coroutine getData() ===")
+getData()
+print("Back from getData() — note that inside the function, we used `yield` so it might be resumed later...")
+
 
 // End
 print("=== End of future_syntax.ember ===")

@@ -12,6 +12,10 @@ module epicAdventure {
 // 2) Demonstrate creation vs. assignment
 var isGameRunning: true    // Created with ':', initially true
 
+// Additional global variables for our event example
+var isNightTime: false
+var monsterCount: 2
+
 // Some small example objects (tables) that we'll mix in or reassign
 var MagicalBeing: {
   castSpell: fn(spell) {
@@ -49,9 +53,40 @@ var player: {
   greet: fn() {
     print("Hello, I'm " + this.name)
   }
+
+  // (A) Event-bound function: triggers on "NightAlarm" if isNightTime
+  //     Chained filters => .filter("all").filter("name(Adventurer)")
+  nightAlert: fn() <- [ "NightAlarm" { if isNightTime }.filter("all").filter("name(Adventurer)") ] {
+    print("Player " + this.name + " reacts to the NightAlarm! It's dark!")
+  }
+
+  // (B) Another event-bound function for "MonsterAlert"
+  //     Only triggers if monsterCount > 0, with a single filter "ofType(player)"
+  monsterAlert: fn() <- [ "MonsterAlert" {
+      if monsterCount > 0 { 
+        print("Player sees monsterCount=" + monsterCount + ", so monsterAlert triggers.")
+      }
+    }.filter("ofType(player)") ] 
+  {
+    print("Player " + this.name + " readies for battle against monsters!")
+  }
 }
 
-// Basic usage
+// A second object (townGuard) that also binds to the "NightAlarm" event
+var townGuard: {
+  name: "Town Guard"
+
+  respondAtNight: fn() <- [ "NightAlarm" { if isNightTime }.filter("guards") ] {
+    print("Guard " + this.name + " lights torches around the town!")
+  }
+}
+
+// A free-floating event-bound function, triggered by "MonsterAlert" for all
+fn monsterAlertGlobal() <- [ "MonsterAlert".filter("all") ] {
+  print("A global event function: 'MonsterAlert' => entire region is on alert!")
+}
+
+// Basic usage with the existing mixins
 player.greet()
 player.checkInventory()
 player.castSpell("Arcane Bolt")
@@ -73,7 +108,6 @@ player.explore()
 // 6) Add a brand new mixin at the next slot via '+:' operator
 //    We had indexes [0]=Explorer, [1]=InventorySystem. Next slot is index=2.
 player +: KnightBehavior
-
 player.defend()  // from KnightBehavior
 
 // 7) A “covered” iterator with break-out and filter
@@ -119,6 +153,34 @@ print("Now dayInfo => weather=" + dayInfo.weather + ", event=" + dayInfo.event)
     }
   }
 ]
+
+// 11) Demonstrate event *invocation*:
+
+fn beginNight() {
+  isNightTime = true
+  print("[BEGIN NIGHT] isNightTime set to true.")
+  // Now invoke the "NightAlarm" event with a condition block + extra filters
+  ()->["NightAlarm" { if isNightTime }].filter("region(Town)").filter("someGroup") {
+    print("[BEGIN NIGHT] Broadcasting NightAlarm in 'Town' for 'someGroup'!")
+  }
+}
+
+fn monstersApproach() {
+  print("Monsters are near! monsterCount => " + monsterCount)
+  // Invoke "MonsterAlert" with a condition block + filter
+  ()->["MonsterAlert" { if monsterCount > 0 }].filter("all") {
+    print("[MONSTER ALERT] There is at least one monster nearby!")
+  }
+}
+
+// 12) Putting it all together
+print("=== Start of extended event usage ===")
+beginNight()       // triggers "NightAlarm" => player.nightAlert & townGuard.respondAtNight 
+monstersApproach() // triggers "MonsterAlert" => calls 'monsterAlert' on player + global function
+
+print("[Decreasing monsterCount to 0 and trying again]")
+monsterCount = 0
+monstersApproach() // won't trigger player's monsterAlert because condition block checks monsterCount > 0
 
 // End
 print("=== End of future_syntax.ember ===")

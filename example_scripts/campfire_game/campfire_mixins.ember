@@ -1,0 +1,35 @@
+// -----------------------------------------------------------------------------
+// campfire_mixins.ember
+// -----------------------------------------------------------------------------
+// Mixin objects that can be inserted into other tables to share functionality.
+//
+
+// A simple "StoryTeller" object
+var StoryTeller:
+  tellStory: fn()
+    if campfireLit
+      print("As the embers crackle, you and your companions share tales of adventure.")
+      // Use c in companions => c is each item in the array
+      [
+        c in companions {
+          print(c + " shares a memorable story around the fire.")
+        }
+      ]
+    el
+      print("It's too dark to share stories. Perhaps light the campfire first?")
+
+// Another Mixin: "FireHandling"
+var FireHandling:
+  lightCampfire: fn()
+    if !campfireLit
+      campfireLit = true
+      print("You light the campfire. The warm glow illuminates the surroundings.")
+    el
+      print("The campfire is already lit.")
+
+  extinguishCampfire: fn()
+    if campfireLit
+      campfireLit = false
+      print("You extinguish the campfire. Darkness creeps around again.")
+    el
+      print("The campfire is already out.")

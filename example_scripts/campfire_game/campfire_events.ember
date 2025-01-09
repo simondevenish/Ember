@@ -1,0 +1,13 @@
+// -----------------------------------------------------------------------------
+// campfire_events.ember
+// -----------------------------------------------------------------------------
+// Demonstrates event-bound or free-standing event-based functions
+//
+
+onNightfall: fn() <- [ "Nightfall".filter("all") ]
+  print("The stars twinkle overhead. Night has fallen. Attempting to light the campfire...")
+
+triggerNightfall: fn()
+  print("== Triggering the 'Nightfall' event. ==")
+  ()->["Nightfall"].filter("all")
+    print("Broadcasting 'Nightfall' to all listeners!")

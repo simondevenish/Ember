@@ -1,0 +1,65 @@
+// -----------------------------------------------------------------------------
+// campfire_main.ember
+// -----------------------------------------------------------------------------
+// The main entry point for the "Campfire Story" game.
+// Pulls together all files, uses the new Ember syntax & features.
+//
+
+// 1) Imports
+use "network.ember"
+use "campfire_data.ember"
+use "campfire_mixins.ember"
+use "campfire_functions.ember"
+use "campfire_events.ember"
+use "campfire_manager.ember"
+
+// 2) Basic introduction
+introducePlayer(playerName, location)
+
+// 3) Print inventory & companions
+print("Your current inventory includes: " + listItems(inventory) + ".")
+print("Your companions are: " + listItems(companions) + ".")
+
+// 4) It's getting dark...
+print("Night falls, and it's getting chilly.")
+
+// 5) Display manager status
+campManager.showStatus()
+
+// 6) Light the campfire and tell a story
+campManager.lightCampfire()
+campManager.tellStory()
+
+// 7) Demonstrate the naked iterator for arrivals
+simulateArrival()
+
+// 8) Use the new “covered” iterator from campfire_functions: collectMultiples(difficulty)
+let multiples = collectMultiples(difficulty)
+print("Multiples of difficulty " + difficulty + " up to 10 => " + multiples)
+
+// 9) Show python-like single-line comprehension usage
+let upperInventory = upperAll(inventory)  // from "campfire_functions.ember"
+print("Upper-case inventory => " + upperInventory)
+
+// 10) Event usage
+print("Triggering an event for demonstration: 'Nightfall' ...")
+triggerNightfall()    // calls "Nightfall" => onNightfall, nightManagerReact (if matching filters)
+
+// 11) Possibly do more manager logic
+campManager.extinguishCampfire()
+campManager.lightCampfire()
+campManager.tellStory()
+
+// 12) Example of async/coroutine function
+fetchNews: <fn()>:
+  be res: network.httpGet("https://example.com/news")
+  print("Received some news => " + res)
+  yield
+  print("Resuming after yield, maybe do more tasks...")
+
+print("=== Testing async + coroutine fetchNews() ===")
+fetchNews()
+print("Done with fetchNews() for now. (It might be resumed if the VM schedules it)") 
+
+// 13) Ending
+print("=== End of Campfire Story game ===")

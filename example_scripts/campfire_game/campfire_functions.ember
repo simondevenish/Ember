@@ -1,0 +1,48 @@
+// -----------------------------------------------------------------------------
+// campfire_functions.ember
+// -----------------------------------------------------------------------------
+// Various free-standing functions demonstrating Ember’s new syntax & features
+//
+
+// 1) Introduce the player to a location
+introducePlayer: fn(name, place)
+  print("Welcome, " + name + ", to the " + place + "!")
+
+// 2) Build a comma-separated list from an array using a covered iterator
+listItems: fn(arr)
+  let result = ""
+  [
+    i: 0 to arr.length {
+      result = result + arr[i]
+      if (i < arr.length - 1)
+        result = result + ", "
+    }
+  ]
+  return result
+
+// 3) Simulate arrival with a basic "naked" iteration
+simulateArrival: fn()
+  i: 1 to 3
+    print("Arriving in " + (4 - i) + " seconds...")
+
+// 4) A demonstration of collecting multiples of 'd' from 1..16, 
+//    stopping if > 10. We do not transform x => no need for (x*x).
+collectMultiples: fn(d)
+  let results = [
+    x: 1 to 16 {
+      if (x > 10) {
+        print("x is now " + x + " => break from collecting.")
+        break
+      }
+    }
+    if (x % d == 0)
+  ]
+  return results
+
+// 5) A python-like single-line comprehension example
+//    For instance, we gather uppercase items from an array into a new array.
+upperAll: fn(arr)
+  // "arr" => an array of strings
+  // We do a single-line covered iterator that transforms each item to uppercase
+  let upperItems = [ c in arr c.toUpperCase()  ]
+  return upperItems

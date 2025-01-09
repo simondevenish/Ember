@@ -1,0 +1,36 @@
+// -----------------------------------------------------------------------------
+// campfire_data.ember
+// -----------------------------------------------------------------------------
+// Houses our main data for the campfire story. Showcases different variable
+// declaration forms: var, omitted keyword, let, and const.
+//
+// "var" or no keyword => reassignable variable
+// "let" => cannot rebind the variable reference to something else, but can mutate the contents
+// "const" => fully immutable (both reference and contents, if it’s a primitive; 
+//            for tables/arrays, the language might block any deeper changes).
+//
+
+// 1) Two ways of creating a variable with an initial value:
+var playerName: "Traveler"
+location: "Whispering Woods"  // omitted the keyword, so defaults to var
+
+// 2) Arrays
+inventory: ["Lantern", "Map", "Journal"]
+companions: ["Luna the Fox", "Oliver the Owl"]
+
+// 3) A boolean
+var campfireLit: false
+
+// 4) Let's add let vs const
+let difficulty: 2
+// We can do "difficulty = 3" if it’s only the content that changes. 
+// But we cannot do "difficulty = somethingElse" to rebind it. 
+
+const maxCompanions: 5
+// We cannot rebind or alter 'maxCompanions' or its value in any way.
+
+//
+// Additional data
+//
+var isNightTime: false
+var storyManagerEnabled: true

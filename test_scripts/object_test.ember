@@ -1,0 +1,39 @@
+// Object Test Script
+// This script tests object literals, property access, and simple nested objects
+
+// Create a simple object with properties
+var player = {
+    name: "Hero",
+    health: 100,
+    mana: 50,
+    attack: 15,
+    defense: 10
+};
+
+// Create an enemy object
+var enemy = {
+    name: "Goblin",
+    health: 50,
+    attack: 8
+};
+
+// Test property access
+print("Initial player name: " + player.name);
+//player.name = "Paladin";
+//print("New player name: " + player.name);
+
+// Test object properties
+print("Player health: " + player.health);
+print("Enemy attack: " + enemy.attack);
+
+// Nested property access
+var game = {
+    settings: {
+        difficulty: "Normal",
+        sound: true,
+        graphics: "High"
+    }
+};
+
+// Test nested property access
+print("Game difficulty: " + game.settings.difficulty); 

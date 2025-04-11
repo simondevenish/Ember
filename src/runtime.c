@@ -43,6 +43,42 @@ RuntimeValue runtime_value_copy(const RuntimeValue* value) {
                 copy.string_value = strdup(value->string_value);
             }
             break;
+        case RUNTIME_VALUE_ARRAY:
+            if (value->array_value.elements && value->array_value.count > 0) {
+                copy.array_value.elements = malloc(sizeof(RuntimeValue) * value->array_value.count);
+                if (copy.array_value.elements) {
+                    for (int i = 0; i < value->array_value.count; i++) {
+                        copy.array_value.elements[i] = runtime_value_copy(&value->array_value.elements[i]);
+                    }
+                }
+            }
+            break;
+        case RUNTIME_VALUE_OBJECT:
+            if (value->object_value.keys && value->object_value.values && value->object_value.count > 0) {
+                // Allocate memory for keys and values
+                copy.object_value.keys = malloc(sizeof(char*) * value->object_value.count);
+                copy.object_value.values = malloc(sizeof(RuntimeValue) * value->object_value.count);
+                
+                if (copy.object_value.keys && copy.object_value.values) {
+                    // Copy each key and value
+                    for (int i = 0; i < value->object_value.count; i++) {
+                        copy.object_value.keys[i] = strdup(value->object_value.keys[i]);
+                        copy.object_value.values[i] = runtime_value_copy(&value->object_value.values[i]);
+                    }
+                } else {
+                    // Handle allocation failure
+                    if (copy.object_value.keys) {
+                        free(copy.object_value.keys);
+                        copy.object_value.keys = NULL;
+                    }
+                    if (copy.object_value.values) {
+                        free(copy.object_value.values);
+                        copy.object_value.values = NULL;
+                    }
+                    copy.object_value.count = 0;
+                }
+            }
+            break;
         case RUNTIME_VALUE_FUNCTION:
             // For user-defined functions, we assume the function definition is shared
             // If you need to deep copy functions, implement it here
@@ -483,6 +519,175 @@ RuntimeValue runtime_evaluate(Environment* env, ASTNode* node) {
             result.type = RUNTIME_VALUE_NULL;
             break;
         }
+        case AST_OBJECT_LITERAL: {
+            // Create an object with the specified properties
+            result.type = RUNTIME_VALUE_OBJECT;
+            int property_count = node->object_literal.property_count;
+            
+            // Allocate arrays for keys and values
+            result.object_value.keys = (char**)malloc(sizeof(char*) * property_count);
+            result.object_value.values = (RuntimeValue*)malloc(sizeof(RuntimeValue) * property_count);
+            
+            if (!result.object_value.keys || !result.object_value.values) {
+                fprintf(stderr, "Error: Memory allocation failed for object literal.\n");
+                free(result.object_value.keys);
+                free(result.object_value.values);
+                result.type = RUNTIME_VALUE_NULL;
+                break;
+            }
+            
+            // Initialize each property
+            for (int i = 0; i < property_count; i++) {
+                result.object_value.keys[i] = strdup(node->object_literal.keys[i]);
+                if (!result.object_value.keys[i]) {
+                    fprintf(stderr, "Error: Memory allocation failed for object key.\n");
+                    // Clean up already allocated memory
+                    for (int j = 0; j < i; j++) {
+                        free(result.object_value.keys[j]);
+                    }
+                    free(result.object_value.keys);
+                    free(result.object_value.values);
+                    result.type = RUNTIME_VALUE_NULL;
+                    break;
+                }
+                
+                // Evaluate the value expression and store it
+                result.object_value.values[i] = runtime_evaluate(env, node->object_literal.values[i]);
+            }
+            
+            result.object_value.count = property_count;
+            break;
+        }
+        
+        case AST_PROPERTY_ACCESS: {
+            // Evaluate the object expression
+            RuntimeValue object = runtime_evaluate(env, node->property_access.object);
+            
+            // Ensure that it's an object
+            if (object.type != RUNTIME_VALUE_OBJECT) {
+                fprintf(stderr, "Error: Cannot access property '%s' of non-object value.\n", 
+                         node->property_access.property);
+                result.type = RUNTIME_VALUE_NULL;
+                break;
+            }
+            
+            // Look for the property in the object
+            bool found = false;
+            for (int i = 0; i < object.object_value.count; i++) {
+                if (strcmp(object.object_value.keys[i], node->property_access.property) == 0) {
+                    // Found the property, return its value
+                    result = runtime_value_copy(&object.object_value.values[i]);
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (!found) {
+                fprintf(stderr, "Error: Object has no property '%s'.\n", 
+                         node->property_access.property);
+                result.type = RUNTIME_VALUE_NULL;
+            }
+            
+            break;
+        }
+        
+        case AST_METHOD_CALL: {
+            // Evaluate the object expression
+            RuntimeValue object = runtime_evaluate(env, node->method_call.object);
+            
+            // Ensure that it's an object
+            if (object.type != RUNTIME_VALUE_OBJECT) {
+                fprintf(stderr, "Error: Cannot call method '%s' on non-object value.\n", 
+                         node->method_call.method);
+                result.type = RUNTIME_VALUE_NULL;
+                break;
+            }
+            
+            // Look for the method in the object
+            bool found = false;
+            RuntimeValue method_value;
+            
+            for (int i = 0; i < object.object_value.count; i++) {
+                if (strcmp(object.object_value.keys[i], node->method_call.method) == 0) {
+                    // Found the method
+                    method_value = object.object_value.values[i];
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (!found) {
+                fprintf(stderr, "Error: Object has no method '%s'.\n", node->method_call.method);
+                result.type = RUNTIME_VALUE_NULL;
+                break;
+            }
+            
+            // Ensure the property is actually a function
+            if (method_value.type != RUNTIME_VALUE_FUNCTION) {
+                fprintf(stderr, "Error: Property '%s' is not a function.\n", node->method_call.method);
+                result.type = RUNTIME_VALUE_NULL;
+                break;
+            }
+            
+            // Execute the method in the context of the object
+            if (method_value.function_value.function_type == FUNCTION_TYPE_BUILTIN) {
+                // Built-in function
+                BuiltinFunction builtin_function = method_value.function_value.builtin_function;
+                
+                // Prepare arguments
+                int arg_count = node->method_call.argument_count;
+                RuntimeValue* args = (RuntimeValue*)malloc((arg_count + 1) * sizeof(RuntimeValue));
+                if (!args) {
+                    fprintf(stderr, "Error: Memory allocation failed for method arguments.\n");
+                    result.type = RUNTIME_VALUE_NULL;
+                    break;
+                }
+                
+                // Add 'this' as the first argument (the object itself)
+                args[0] = object;
+                
+                // Evaluate and add user arguments
+                for (int i = 0; i < arg_count; i++) {
+                    args[i + 1] = runtime_evaluate(env, node->method_call.arguments[i]);
+                }
+                
+                // Execute the built-in function with the object as context
+                result = builtin_function(env, args, arg_count + 1);
+                
+                // Free the allocated memory
+                free(args);
+                
+            } else {
+                // User-defined function
+                UserDefinedFunction* user_function = method_value.function_value.user_function;
+                
+                // Create a child environment for the function
+                Environment* child_env = runtime_create_child_environment(env);
+                
+                // Add 'this' as a special variable in the environment
+                runtime_set_variable(child_env, "this", object);
+                
+                // Map parameters to argument values
+                for (int i = 0; i < user_function->parameter_count; i++) {
+                    const char* param_name = user_function->parameters[i];
+                    RuntimeValue arg_value = (i < node->method_call.argument_count)
+                        ? runtime_evaluate(env, node->method_call.arguments[i])
+                        : (RuntimeValue){ .type = RUNTIME_VALUE_NULL };
+                    runtime_set_variable(child_env, param_name, arg_value);
+                }
+                
+                // Execute the function body
+                runtime_execute_block(child_env, user_function->body);
+                
+                // For simplicity, methods return null (you can extend this to support return statements)
+                result.type = RUNTIME_VALUE_NULL;
+                
+                // Free the child environment
+                runtime_free_environment(child_env);
+            }
+            
+            break;
+        }
         default:
             fprintf(stderr, "Error: Unhandled AST node type %d.\n", node->type);
             result.type = RUNTIME_VALUE_NULL;
@@ -727,6 +932,31 @@ void runtime_free_value(RuntimeValue* value) {
                 value->string_value = NULL;
             }
             break;
+        case RUNTIME_VALUE_ARRAY:
+            if (value->array_value.elements) {
+                // Free each element in the array
+                for (int i = 0; i < value->array_value.count; i++) {
+                    runtime_free_value(&value->array_value.elements[i]);
+                }
+                free(value->array_value.elements);
+                value->array_value.elements = NULL;
+            }
+            value->array_value.count = 0;
+            break;
+        case RUNTIME_VALUE_OBJECT:
+            if (value->object_value.keys && value->object_value.values) {
+                // Free each key and value in the object
+                for (int i = 0; i < value->object_value.count; i++) {
+                    free(value->object_value.keys[i]);
+                    runtime_free_value(&value->object_value.values[i]);
+                }
+                free(value->object_value.keys);
+                free(value->object_value.values);
+                value->object_value.keys = NULL;
+                value->object_value.values = NULL;
+            }
+            value->object_value.count = 0;
+            break;
         case RUNTIME_VALUE_FUNCTION:
             if (value->function_value.function_type == FUNCTION_TYPE_USER) {
                 UserDefinedFunction* user_function = value->function_value.user_function;
@@ -777,6 +1007,33 @@ void print_runtime_value(const RuntimeValue* value) {
 
         case RUNTIME_VALUE_NULL:
             printf("Null\n");
+            break;
+            
+        case RUNTIME_VALUE_ARRAY:
+            printf("Array: [\n");
+            for (int i = 0; i < value->array_value.count; i++) {
+                printf("  [%d] ", i);
+                print_runtime_value(&value->array_value.elements[i]);
+            }
+            printf("]\n");
+            break;
+            
+        case RUNTIME_VALUE_OBJECT:
+            printf("Object: {\n");
+            for (int i = 0; i < value->object_value.count; i++) {
+                printf("  %s: ", value->object_value.keys[i]);
+                print_runtime_value(&value->object_value.values[i]);
+            }
+            printf("}\n");
+            break;
+            
+        case RUNTIME_VALUE_FUNCTION:
+            if (value->function_value.function_type == FUNCTION_TYPE_BUILTIN) {
+                printf("Built-in Function\n");
+            } else {
+                printf("User-defined Function: %s\n", 
+                       value->function_value.user_function->name);
+            }
             break;
 
         default:
@@ -834,10 +1091,114 @@ char* runtime_value_to_string(const RuntimeValue* value) {
             result = strdup("null");
             break;
         }
+        
+        case RUNTIME_VALUE_ARRAY: {
+            // Start with an empty JSON-style array
+            char* array_str = strdup("[]");
+            if (!array_str) return strdup("[Array]");
+            
+            // For each element in the array
+            for (int i = 0; i < value->array_value.count; i++) {
+                // Convert the element to a string
+                char* elem_str = runtime_value_to_string(&value->array_value.elements[i]);
+                if (!elem_str) continue;
+                
+                // Allocate memory for the new array string (old string + element + delimiter)
+                size_t new_len = strlen(array_str) + strlen(elem_str) + 3; // +3 for ", " and potentially "]"
+                char* new_array_str = (char*)malloc(new_len);
+                if (!new_array_str) {
+                    free(elem_str);
+                    free(array_str);
+                    return strdup("[Array]");
+                }
+                
+                // If this is the first element, replace the opening bracket
+                if (i == 0) {
+                    sprintf(new_array_str, "[%s", elem_str);
+                } else {
+                    // Otherwise, append to the existing string with a delimiter
+                    sprintf(new_array_str, "%.*s, %s", (int)strlen(array_str) - 1, array_str, elem_str);
+                }
+                
+                // Close the array
+                strcat(new_array_str, "]");
+                
+                // Free the old strings and update array_str
+                free(elem_str);
+                free(array_str);
+                array_str = new_array_str;
+            }
+            
+            result = array_str;
+            break;
+        }
+        
+        case RUNTIME_VALUE_OBJECT: {
+            // Start with an empty JSON-style object
+            char* obj_str = strdup("{}");
+            if (!obj_str) return strdup("{Object}");
+            
+            // For each property in the object
+            for (int i = 0; i < value->object_value.count; i++) {
+                char* key = value->object_value.keys[i];
+                char* value_str = runtime_value_to_string(&value->object_value.values[i]);
+                if (!value_str) continue;
+                
+                // Allocate memory for the new object string
+                size_t new_len = strlen(obj_str) + strlen(key) + strlen(value_str) + 5; // +5 for ": ", ", " and "}"
+                char* new_obj_str = (char*)malloc(new_len);
+                if (!new_obj_str) {
+                    free(value_str);
+                    free(obj_str);
+                    return strdup("{Object}");
+                }
+                
+                // If this is the first property, replace the opening brace
+                if (i == 0) {
+                    sprintf(new_obj_str, "{%s: %s", key, value_str);
+                } else {
+                    // Otherwise, append to the existing string with a delimiter
+                    sprintf(new_obj_str, "%.*s, %s: %s", (int)strlen(obj_str) - 1, obj_str, key, value_str);
+                }
+                
+                // Close the object
+                strcat(new_obj_str, "}");
+                
+                // Free the old strings and update obj_str
+                free(value_str);
+                free(obj_str);
+                obj_str = new_obj_str;
+            }
+            
+            result = obj_str;
+            break;
+        }
+        
+        case RUNTIME_VALUE_FUNCTION: {
+            // Return a simple string for functions
+            if (value->function_value.function_type == FUNCTION_TYPE_BUILTIN) {
+                result = strdup("[Built-in Function]");
+            } else {
+                // Use the function name if available
+                const char* name = value->function_value.user_function->name;
+                if (name) {
+                    size_t len = strlen(name) + 16; // Extra space for "[Function: ]"
+                    result = (char*)malloc(len);
+                    if (result) {
+                        snprintf(result, len, "[Function: %s]", name);
+                    } else {
+                        result = strdup("[Function]");
+                    }
+                } else {
+                    result = strdup("[Function]");
+                }
+            }
+            break;
+        }
 
         default: {
             // Handle unexpected types
-            result = strdup("unknown");
+            result = strdup("[Unknown Type]");
             break;
         }
     }

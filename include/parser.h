@@ -22,6 +22,9 @@ typedef enum {
     AST_ARRAY_LITERAL,
     AST_INDEX_ACCESS,
     AST_IMPORT,
+    AST_OBJECT_LITERAL,  // Object literal: {a: 1, b: 2}
+    AST_PROPERTY_ACCESS, // Property access: obj.prop
+    AST_METHOD_CALL      // Method call: obj.method()
 } ASTNodeType;
 
 // AST Node Structure
@@ -48,6 +51,9 @@ typedef struct ASTNode {
         struct { struct ASTNode** elements; int element_count; } array_literal; // For AST_ARRAY_LITERAL
         struct { struct ASTNode* array_expr; struct ASTNode* index_expr; } index_access; // For AST_INDEX_ACCESS
         struct { char* import_path; } import_stmt; // For AST_IMPORT
+        struct { char** keys; struct ASTNode** values; int property_count; } object_literal; // For AST_OBJECT_LITERAL
+        struct { struct ASTNode* object; char* property; } property_access; // For AST_PROPERTY_ACCESS
+        struct { struct ASTNode* object; char* method; struct ASTNode** arguments; int argument_count; } method_call; // For AST_METHOD_CALL
     };
 } ASTNode;
 
@@ -251,5 +257,21 @@ void print_ast(const ASTNode* node, int depth);
  */
 void parser_set_error_callback(Parser* parser, ParserErrorCallback callback);
 
+/**
+ * @brief Parse an object literal (e.g., {key1: value1, key2: value2}).
+ * 
+ * @param parser The parser instance.
+ * @return ASTNode* The parsed object literal node.
+ */
+ASTNode* parse_object_literal(Parser* parser);
+
+/**
+ * @brief Parse property access or method call (e.g., obj.prop or obj.method()).
+ * 
+ * @param parser The parser instance.
+ * @param object The object AST node.
+ * @return ASTNode* The parsed property access or method call node.
+ */
+ASTNode* parse_property_or_method(Parser* parser, ASTNode* object);
 
 #endif // PARSER_H

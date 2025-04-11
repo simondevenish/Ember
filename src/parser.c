@@ -185,6 +185,30 @@ void free_ast(ASTNode* node) {
         case AST_IMPORT:
             free(node->import_stmt.import_path);
             break;
+        case AST_OBJECT_LITERAL:
+            // Free keys
+            for (int i = 0; i < node->object_literal.property_count; i++) {
+                free(node->object_literal.keys[i]);
+            }
+            free(node->object_literal.keys);
+            // Free values
+            for (int i = 0; i < node->object_literal.property_count; i++) {
+                free_ast(node->object_literal.values[i]);
+            }
+            free(node->object_literal.values);
+            break;
+        case AST_PROPERTY_ACCESS:
+            free(node->property_access.property);
+            free_ast(node->property_access.object);
+            break;
+        case AST_METHOD_CALL:
+            free(node->method_call.method);
+            for (int i = 0; i < node->method_call.argument_count; i++) {
+                free_ast(node->method_call.arguments[i]);
+            }
+            free(node->method_call.arguments);
+            free_ast(node->method_call.object);
+            break;
         default:
             fprintf(stderr, "Error: Unknown AST node type\n");
             break;
@@ -299,6 +323,11 @@ ASTNode* parse_factor(Parser* parser) {
         parser_advance(parser);
         factor_node = literal;
     }
+    // Handle object literals
+    else if (parser->current_token.type == TOKEN_PUNCTUATION &&
+             strcmp(parser->current_token.value, "{") == 0) {
+        factor_node = parse_object_literal(parser);
+    }
     // Handle parentheses for sub-expressions
     else if (parser->current_token.type == TOKEN_PUNCTUATION &&
         strcmp(parser->current_token.value, "(") == 0) {
@@ -393,7 +422,6 @@ ASTNode* parse_factor(Parser* parser) {
         parser_advance(parser);
         factor_node = array_node;
     }
-    // Handle identifiers (variables and function calls)
     else if (parser->current_token.type == TOKEN_IDENTIFIER) {
         char* identifier = strdup(parser->current_token.value);
         if (!identifier) {
@@ -496,7 +524,8 @@ ASTNode* parse_factor(Parser* parser) {
         return NULL;
     }
 
-     while (parser->current_token.type == TOKEN_PUNCTUATION &&
+    // Check for array index access (arr[idx])
+    while (parser->current_token.type == TOKEN_PUNCTUATION &&
            strcmp(parser->current_token.value, "[") == 0)
     {
         // We have an index access, e.g. "myArray[ indexExpr ]"
@@ -521,7 +550,7 @@ ASTNode* parse_factor(Parser* parser) {
         parser_advance(parser); // skip ']'
 
         // Build an AST_INDEX_ACCESS node
-        ASTNode* index_node = create_ast_node(AST_INDEX_ACCESS);  // <-- you must define AST_INDEX_ACCESS
+        ASTNode* index_node = create_ast_node(AST_INDEX_ACCESS);
         if (!index_node) {
             report_error(parser, "Memory allocation failed for AST_INDEX_ACCESS");
             free_ast(factor_node);
@@ -538,7 +567,20 @@ ASTNode* parse_factor(Parser* parser) {
         factor_node = index_node;
     }
 
-    // Finally, return the constructed factor_node
+    // Check for property access or method call (obj.prop or obj.method())
+    if (factor_node != NULL && 
+        parser->current_token.type == TOKEN_PUNCTUATION &&
+        strcmp(parser->current_token.value, ".") == 0) {
+        factor_node = parse_property_or_method(parser, factor_node);
+        
+        // Handle chained property access or method calls (obj.prop1.prop2 or obj.method1().method2())
+        while (factor_node != NULL && 
+               parser->current_token.type == TOKEN_PUNCTUATION &&
+               strcmp(parser->current_token.value, ".") == 0) {
+            factor_node = parse_property_or_method(parser, factor_node);
+        }
+    }
+
     return factor_node;
 }
 
@@ -1739,6 +1781,28 @@ void print_ast(const ASTNode* node, int depth) {
             }
             break;
 
+        case AST_OBJECT_LITERAL:
+            printf("Object Literal:\n");
+            for (int i = 0; i < node->object_literal.property_count; i++) {
+                printf("  %s: ", node->object_literal.keys[i]);
+                print_ast(node->object_literal.values[i], depth + 1);
+            }
+            break;
+
+        case AST_PROPERTY_ACCESS:
+            printf("Property Access: %s\n", node->property_access.property);
+            print_ast(node->property_access.object, depth + 1);
+            break;
+
+        case AST_METHOD_CALL:
+            printf("Method Call: %s\n", node->method_call.method);
+            print_ast(node->method_call.object, depth + 1);
+            printf("  Arguments:\n");
+            for (int i = 0; i < node->method_call.argument_count; i++) {
+                print_ast(node->method_call.arguments[i], depth + 1);
+            }
+            break;
+
         default:
             printf("Unknown AST Node Type\n");
             break;
@@ -1752,4 +1816,324 @@ void parser_set_error_callback(Parser* parser, ParserErrorCallback callback) {
     }
 
     parser->error_callback = callback;
+}
+
+ASTNode* parse_object_literal(Parser* parser) {
+    // Expect opening '{'
+    if (!match_token(parser, TOKEN_PUNCTUATION, "{")) {
+        report_error(parser, "Expected '{' to start object literal");
+        return NULL;
+    }
+
+    char** keys = NULL;
+    ASTNode** values = NULL;
+    int property_count = 0;
+
+    // Handle the empty object case
+    if (parser->current_token.type == TOKEN_PUNCTUATION && 
+        strcmp(parser->current_token.value, "}") == 0) {
+        parser_advance(parser); // Skip '}'
+        
+        // Create empty object literal node
+        ASTNode* object_node = create_ast_node(AST_OBJECT_LITERAL);
+        if (!object_node) {
+            report_error(parser, "Memory allocation failed for object literal node");
+            return NULL;
+        }
+        
+        object_node->object_literal.keys = NULL;
+        object_node->object_literal.values = NULL;
+        object_node->object_literal.property_count = 0;
+        
+        return object_node;
+    }
+
+    // Parse properties
+    do {
+        // Parse the key, which must be an identifier
+        if (parser->current_token.type != TOKEN_IDENTIFIER && 
+            parser->current_token.type != TOKEN_STRING) {
+            report_error(parser, "Expected identifier or string as object key");
+            // Clean up
+            for (int i = 0; i < property_count; i++) {
+                free(keys[i]);
+                free_ast(values[i]);
+            }
+            free(keys);
+            free(values);
+            return NULL;
+        }
+
+        // Store the key
+        char* key = strdup(parser->current_token.value);
+        if (!key) {
+            report_error(parser, "Memory allocation failed for object key");
+            // Clean up
+            for (int i = 0; i < property_count; i++) {
+                free(keys[i]);
+                free_ast(values[i]);
+            }
+            free(keys);
+            free(values);
+            return NULL;
+        }
+        parser_advance(parser);
+
+        // Expect ':'
+        if (!match_token(parser, TOKEN_PUNCTUATION, ":")) {
+            report_error(parser, "Expected ':' after object key");
+            // Clean up
+            free(key);
+            for (int i = 0; i < property_count; i++) {
+                free(keys[i]);
+                free_ast(values[i]);
+            }
+            free(keys);
+            free(values);
+            return NULL;
+        }
+
+        // Parse the value
+        ASTNode* value = parse_expression(parser, 0);
+        if (!value) {
+            report_error(parser, "Failed to parse object property value");
+            // Clean up
+            free(key);
+            for (int i = 0; i < property_count; i++) {
+                free(keys[i]);
+                free_ast(values[i]);
+            }
+            free(keys);
+            free(values);
+            return NULL;
+        }
+
+        // Expand the arrays of keys and values
+        char** new_keys = realloc(keys, sizeof(char*) * (property_count + 1));
+        if (!new_keys) {
+            report_error(parser, "Memory allocation failed for object keys");
+            // Clean up
+            free(key);
+            free_ast(value);
+            for (int i = 0; i < property_count; i++) {
+                free(keys[i]);
+                free_ast(values[i]);
+            }
+            free(keys);
+            free(values);
+            return NULL;
+        }
+        keys = new_keys;
+
+        ASTNode** new_values = realloc(values, sizeof(ASTNode*) * (property_count + 1));
+        if (!new_values) {
+            report_error(parser, "Memory allocation failed for object values");
+            // Clean up
+            free(key);
+            free_ast(value);
+            for (int i = 0; i < property_count; i++) {
+                free(keys[i]);
+                free_ast(values[i]);
+            }
+            free(keys);
+            free(values);
+            return NULL;
+        }
+        values = new_values;
+
+        // Store the key and value
+        keys[property_count] = key;
+        values[property_count] = value;
+        property_count++;
+
+        // Look for ',' or '}'
+        if (parser->current_token.type == TOKEN_PUNCTUATION && 
+            strcmp(parser->current_token.value, ",") == 0) {
+            parser_advance(parser); // Skip ','
+            
+            // Handle trailing comma, if the next token is '}'
+            if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                strcmp(parser->current_token.value, "}") == 0) {
+                break;
+            }
+        } else if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                   strcmp(parser->current_token.value, "}") == 0) {
+            // End of object literal
+            break;
+        } else {
+            report_error(parser, "Expected ',' or '}' after object property");
+            // Clean up
+            for (int i = 0; i < property_count; i++) {
+                free(keys[i]);
+                free_ast(values[i]);
+            }
+            free(keys);
+            free(values);
+            return NULL;
+        }
+    } while (1);
+
+    // Consume the closing '}'
+    if (!match_token(parser, TOKEN_PUNCTUATION, "}")) {
+        report_error(parser, "Expected '}' to close object literal");
+        // Clean up
+        for (int i = 0; i < property_count; i++) {
+            free(keys[i]);
+            free_ast(values[i]);
+        }
+        free(keys);
+        free(values);
+        return NULL;
+    }
+
+    // Create the object literal node
+    ASTNode* object_node = create_ast_node(AST_OBJECT_LITERAL);
+    if (!object_node) {
+        report_error(parser, "Memory allocation failed for object literal node");
+        // Clean up
+        for (int i = 0; i < property_count; i++) {
+            free(keys[i]);
+            free_ast(values[i]);
+        }
+        free(keys);
+        free(values);
+        return NULL;
+    }
+
+    object_node->object_literal.keys = keys;
+    object_node->object_literal.values = values;
+    object_node->object_literal.property_count = property_count;
+
+    return object_node;
+}
+
+ASTNode* parse_property_or_method(Parser* parser, ASTNode* object) {
+    // Expect '.'
+    if (!match_token(parser, TOKEN_PUNCTUATION, ".")) {
+        report_error(parser, "Expected '.' for property access");
+        free_ast(object);
+        return NULL;
+    }
+
+    // Expect property/method name (identifier)
+    if (parser->current_token.type != TOKEN_IDENTIFIER) {
+        report_error(parser, "Expected identifier after '.'");
+        free_ast(object);
+        return NULL;
+    }
+
+    // Capture property/method name
+    char* name = strdup(parser->current_token.value);
+    if (!name) {
+        report_error(parser, "Memory allocation failed for property/method name");
+        free_ast(object);
+        return NULL;
+    }
+    parser_advance(parser);
+
+    // Check if this is a property access or a method call
+    if (parser->current_token.type == TOKEN_PUNCTUATION && 
+        strcmp(parser->current_token.value, "(") == 0) {
+        // This is a method call
+        parser_advance(parser); // Skip '('
+
+        // Parse arguments
+        ASTNode** arguments = NULL;
+        int argument_count = 0;
+
+        // Handle the case of no arguments
+        if (parser->current_token.type == TOKEN_PUNCTUATION && 
+            strcmp(parser->current_token.value, ")") == 0) {
+            parser_advance(parser); // Skip ')'
+        } else {
+            // Parse arguments
+            do {
+                ASTNode* arg = parse_expression(parser, 0);
+                if (!arg) {
+                    report_error(parser, "Failed to parse method argument");
+                    free(name);
+                    free_ast(object);
+                    // Clean up previously parsed arguments
+                    for (int i = 0; i < argument_count; i++) {
+                        free_ast(arguments[i]);
+                    }
+                    free(arguments);
+                    return NULL;
+                }
+
+                // Add to arguments array
+                ASTNode** new_args = realloc(arguments, sizeof(ASTNode*) * (argument_count + 1));
+                if (!new_args) {
+                    report_error(parser, "Memory allocation failed for method arguments");
+                    free(name);
+                    free_ast(object);
+                    free_ast(arg);
+                    // Clean up previously parsed arguments
+                    for (int i = 0; i < argument_count; i++) {
+                        free_ast(arguments[i]);
+                    }
+                    free(arguments);
+                    return NULL;
+                }
+                arguments = new_args;
+                arguments[argument_count++] = arg;
+
+                // Look for ',' or ')'
+                if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                    strcmp(parser->current_token.value, ",") == 0) {
+                    parser_advance(parser); // Skip ','
+                } else {
+                    break;
+                }
+            } while (1);
+
+            // Expect closing ')'
+            if (!match_token(parser, TOKEN_PUNCTUATION, ")")) {
+                report_error(parser, "Expected ')' after method arguments");
+                free(name);
+                free_ast(object);
+                // Clean up arguments
+                for (int i = 0; i < argument_count; i++) {
+                    free_ast(arguments[i]);
+                }
+                free(arguments);
+                return NULL;
+            }
+        }
+
+        // Create method call node
+        ASTNode* method_call = create_ast_node(AST_METHOD_CALL);
+        if (!method_call) {
+            report_error(parser, "Memory allocation failed for method call node");
+            free(name);
+            free_ast(object);
+            // Clean up arguments
+            for (int i = 0; i < argument_count; i++) {
+                free_ast(arguments[i]);
+            }
+            free(arguments);
+            return NULL;
+        }
+
+        method_call->method_call.object = object;
+        method_call->method_call.method = name;
+        method_call->method_call.arguments = arguments;
+        method_call->method_call.argument_count = argument_count;
+
+        return method_call;
+    } else {
+        // This is a property access
+        ASTNode* property_access = create_ast_node(AST_PROPERTY_ACCESS);
+        if (!property_access) {
+            report_error(parser, "Memory allocation failed for property access node");
+            free(name);
+            free_ast(object);
+            return NULL;
+        }
+
+        property_access->property_access.object = object;
+        property_access->property_access.property = name;
+
+        return property_access;
+    }
 }

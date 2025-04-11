@@ -227,7 +227,7 @@ Token lexer_next_token(Lexer* lexer) {
         operator[0] = current_char;
         operator[1] = '\0';
         return (Token){TOKEN_OPERATOR, operator, lexer->line, lexer->column};
-    } else if (strchr("(){}[],;.", current_char)) {
+    } else if (strchr("(){}[],;.:", current_char)) {
         // Punctuation
         char* punctuation = (char*)malloc(2);
         punctuation[0] = current_char;

@@ -1,0 +1,12 @@
+// Property Test
+// Testing basic object property access
+
+// Create a simple object
+var obj = { name: "test" };
+
+// Access property
+print(obj.name);
+
+// NOTE: The assignment doesn't work yet
+//obj.name = "updated";
+//print(obj.name); 

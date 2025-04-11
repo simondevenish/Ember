@@ -8,6 +8,7 @@
 #include "utils.h"
 #include "runtime.h"
 #include "sdl_module.h"
+#include "raylib_module.h" // Our new module
 
 /**
  * Register all built-in functions to the runtime environment.
@@ -40,6 +41,10 @@ void builtins_register(Environment* env) {
     // --------------------------------------------
     if (is_sdl_installed()) {
         sdl_register_builtins(env);
+    }
+
+    if (utils_is_package_installed("raylib")) {
+        raylib_register_builtins(env);
     }
 }
 

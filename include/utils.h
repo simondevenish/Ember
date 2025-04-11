@@ -39,6 +39,8 @@ typedef struct {
  */
 EmberPackageList utils_read_installed_packages(void);
 
+static char* emberpm_minify_json(const char* input);
+
 /**
  * @brief Checks whether a particular package (by name) is installed.
  * 

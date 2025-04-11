@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <ctype.h> // for isspace()
 
 #ifdef _WIN32
 #include <direct.h>  // For _mkdir on Windows
@@ -58,6 +59,44 @@ char* read_file(const char* filename)
     fclose(file);
     return buffer;
 }
+
+#include <ctype.h> // for isspace()
+
+/**
+ * @brief Remove whitespace from the JSON text so we can do naive substring matches
+ *        like "{\"name\"" without worrying about newlines/spaces.
+ *
+ * @param input The original JSON string (null-terminated).
+ * @return A newly allocated string with all whitespace removed. Caller must free().
+ */
+static char* emberpm_minify_json(const char* input)
+{
+    if (!input) return NULL;
+
+    size_t len = strlen(input);
+    // Allocate enough space to hold all characters (worst-case: no whitespace)
+    char* out = (char*)malloc(len + 1);
+    if (!out) {
+        return NULL;
+    }
+
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++) {
+        // If you only want to remove "ASCII whitespace," you can do:
+        // if (!isspace((unsigned char)input[i])) { ... }
+        // or pick which chars you want to skip (space, tab, newline, carriage return, etc.).
+        char c = input[i];
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            // Skip
+            continue;
+        }
+        // Otherwise keep this character
+        out[j++] = c;
+    }
+    out[j] = '\0'; // Null-terminate
+    return out;
+}
+
 
 // -----------------------------------------------------------------------------
 // Return the path to the local .ember/pm/ directory in the current project.

@@ -7,6 +7,7 @@ project(Ember C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_OSX_DEPLOYMENT_TARGET "14.4" CACHE STRING "Minimum OS X deployment version")
 
 # Default build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -30,6 +31,19 @@ set(SDL_STATIC ON  CACHE BOOL "" FORCE)
 
 # The official SDL2 repo has its own CMakeLists. We add it:
 add_subdirectory(thirdparty/SDL2)
+
+# ----------------------------------------------------------------------------
+# 2B) Configure/Build Raylib from submodule (optional configuration)
+# ----------------------------------------------------------------------------
+# If you want raylib as static (not shared), you can force these:
+# set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# Disable examples/tests (just as an example):
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+
+# Add the subdirectory for raylib
+add_subdirectory(thirdparty/raylib)
 
 # ----------------------------------------------------------------------------
 # 3) Gather Sources & Build Ember Library
@@ -56,12 +70,16 @@ target_link_libraries(emberpm PRIVATE Ember m pthread)
 # ----------------------------------------------------------------------------
 # 6) Link SDL2 Statically with Ember
 # ----------------------------------------------------------------------------
-# Since we built SDL2 as a static lib, link with SDL2::SDL2-static.
-# (The target name may differ depending on the SDL2 CMake config.)
 target_link_libraries(Ember PRIVATE SDL2::SDL2-static)
 
-# target_link_libraries(emberc PRIVATE SDL2::SDL2-static)
-# target_link_libraries(emberpm PRIVATE SDL2::SDL2-static)
+# ----------------------------------------------------------------------------
+# 6B) Link Raylib with Ember
+# ----------------------------------------------------------------------------
+# The 'raylib' target is provided by the raylib subdirectory’s CMakeLists.
+target_link_libraries(Ember PRIVATE raylib)
+
+target_link_libraries(emberc PRIVATE raylib)
+target_link_libraries(emberpm PRIVATE raylib)
 
 # ----------------------------------------------------------------------------
 # 7) Installation

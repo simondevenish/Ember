@@ -1,0 +1,73 @@
+// Nested Property Assignment Test
+// This script tests assignment to nested properties in objects
+
+// Create a nested object
+var game = {
+    settings: {
+        difficulty: "Normal",
+        sound: true,
+        graphics: {
+            quality: "Medium",
+            fullscreen: false
+        }
+    },
+    player: {
+        name: "Hero",
+        stats: {
+            health: 100,
+            mana: 50
+        }
+    }
+};
+
+// Print initial values
+print("Initial difficulty: " + game.settings.difficulty);
+print("Initial graphics quality: " + game.settings.graphics.quality);
+print("Initial player health: " + game.player.stats.health);
+
+// Modify nested properties
+print("\nChanging values...");
+game.settings.difficulty = "Hard";
+game.settings.graphics.quality = "High";
+game.player.stats.health = 120;
+
+// Verify changes
+print("\nAfter changes:");
+print("New difficulty: " + game.settings.difficulty);
+print("New graphics quality: " + game.settings.graphics.quality);
+print("New player health: " + game.player.stats.health);
+
+// Modify a property at each level
+print("\nChanging more values...");
+game.version = "1.0";  // Top level
+game.settings.vsync = true;  // Middle level
+game.player.stats.armor = 35;  // Deep level
+
+// Verify all these changes
+print("\nAfter more changes:");
+print("Game version: " + game.version);
+print("VSync enabled: " + game.settings.vsync);
+print("Player armor: " + game.player.stats.armor);
+
+// Test overwriting an object with a simple value
+print("\nOverwriting an object with a simple value...");
+game.settings.graphics = "Disabled";
+
+// Verify the change
+print("\nAfter overwrite:");
+print("Graphics setting: " + game.settings.graphics);
+
+// Now try to access what was previously a nested property
+// This should produce an error or return null
+print("Trying to access former nested property: " + game.settings.graphics.quality);
+
+// Test assignment to null properties
+print("\nTests with null and undefined properties:");
+// Create a simple object
+var data = { x: null };
+print("data.x: " + data.x);
+
+// Try to assign to a property of null
+print("Trying to assign to property of null - should fail/warn:");
+data.x.y = "test";  // Should fail or warn
+print("data.x: " + data.x); 

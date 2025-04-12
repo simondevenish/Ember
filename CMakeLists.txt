@@ -23,17 +23,7 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 add_compile_options(-Wall -Wextra -g -O0)
 
 # ----------------------------------------------------------------------------
-# 2) Configure/Build SDL2 from submodule *statically*
-# ----------------------------------------------------------------------------
-# Force SDL2 to build as static (and not shared):
-set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-set(SDL_STATIC ON  CACHE BOOL "" FORCE)
-
-# The official SDL2 repo has its own CMakeLists. We add it:
-add_subdirectory(thirdparty/SDL2)
-
-# ----------------------------------------------------------------------------
-# 2B) Configure/Build Raylib from submodule (optional configuration)
+# 2) Configure/Build Raylib from submodule (optional configuration)
 # ----------------------------------------------------------------------------
 # If you want raylib as static (not shared), you can force these:
 # set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -68,14 +58,9 @@ add_executable(emberpm "${CMAKE_CURRENT_SOURCE_DIR}/src/emberpm.c")
 target_link_libraries(emberpm PRIVATE Ember m pthread)
 
 # ----------------------------------------------------------------------------
-# 6) Link SDL2 Statically with Ember
+# 6) Link Raylib with Ember
 # ----------------------------------------------------------------------------
-target_link_libraries(Ember PRIVATE SDL2::SDL2-static)
-
-# ----------------------------------------------------------------------------
-# 6B) Link Raylib with Ember
-# ----------------------------------------------------------------------------
-# The 'raylib' target is provided by the raylib subdirectory’s CMakeLists.
+# The 'raylib' target is provided by the raylib subdirectory's CMakeLists.
 target_link_libraries(Ember PRIVATE raylib)
 
 target_link_libraries(emberc PRIVATE raylib)

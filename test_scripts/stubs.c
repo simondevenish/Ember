@@ -23,12 +23,6 @@ void raylib_register_builtins(Environment* env) {
     (void)env;
 }
 
-// Stub for sdl_register_builtins
-void sdl_register_builtins(Environment* env) {
-    // No-op for test
-    (void)env;
-}
-
 // Stub for symbol_table functions
 typedef struct SymbolTable {
     int dummy;

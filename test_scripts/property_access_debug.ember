@@ -1,0 +1,27 @@
+// Property access debugging script
+
+// Create a simple object
+var obj = {
+    x: {
+        y: "original"
+    }
+};
+
+// Print initial value
+print("Initial obj.x.y: " + obj.x.y);
+
+// Add additional debug prints for property values
+print("obj[x] type check");
+print("obj.x: " + obj.x);
+
+// Update nested property
+print("Updating obj.x.y to 'updated'");
+obj.x.y = "updated";
+print("Update completed");
+
+// Print properties again for debugging
+print("obj.x after update: " + obj.x);
+print("Try accessing obj.x.y: " + obj.x.y);
+
+// Verify the update
+print("Final obj.x.y: " + obj.x.y); 

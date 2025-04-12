@@ -1,0 +1,5 @@
+// Minimal nested property test
+var obj = { x: { y: "original" } };
+print("Before: " + obj.x.y);
+obj.x.y = "updated";
+print("After: " + obj.x.y); 

@@ -209,6 +209,11 @@ void free_ast(ASTNode* node) {
             free(node->method_call.arguments);
             free_ast(node->method_call.object);
             break;
+        case AST_PROPERTY_ASSIGNMENT:
+            free(node->property_assignment.property);
+            free_ast(node->property_assignment.object);
+            free_ast(node->property_assignment.value);
+            break;
         default:
             fprintf(stderr, "Error: Unknown AST node type\n");
             break;
@@ -518,7 +523,8 @@ ASTNode* parse_factor(Parser* parser) {
             var_node->variable.variable_name = identifier;
             factor_node = var_node;
         }
-    } else {
+    }
+    else {
         // If none of the above, return NULL (syntax error)
         report_error(parser, "Unexpected token");
         return NULL;
@@ -622,8 +628,8 @@ ASTNode* parse_expression(Parser* parser, int min_precedence) {
                 return NULL;
             }
 
-             if (left->type != AST_VARIABLE) {
-                 report_error(parser, "Left-hand side of '=' must be a variable");
+             if (left->type != AST_VARIABLE && left->type != AST_PROPERTY_ACCESS) {
+                 report_error(parser, "Left-hand side of '=' must be a variable or property access");
                  free_ast(left);
                  free_ast(right);
                  free_ast(assignment_node);
@@ -635,10 +641,37 @@ ASTNode* parse_expression(Parser* parser, int min_precedence) {
                 // Take ownership of the name pointer
                 assignment_node->assignment.variable = left->variable.variable_name;
                 // We do NOT free left->variable.variable_name here, because we just moved it
-                // or we can do a strdup if we want a brand new copy, etc.
                 left->variable.variable_name = NULL; 
-            } else {
-                // If you don't enforce variable left-sides, you might do something else:
+            } 
+            // If it's a property access, we use property_assignment 
+            else if (left->type == AST_PROPERTY_ACCESS) {
+                // Create a property assignment node instead
+                free(assignment_node);  // Free the regular assignment node
+                
+                // Create a property assignment node
+                ASTNode* property_assignment = create_ast_node(AST_PROPERTY_ASSIGNMENT);
+                if (!property_assignment) {
+                    report_error(parser, "Memory allocation failed for property assignment node");
+                    free_ast(left);
+                    free_ast(right);
+                    return NULL;
+                }
+                
+                // Move data from property_access to property_assignment
+                property_assignment->property_assignment.object = left->property_access.object;
+                property_assignment->property_assignment.property = left->property_access.property;
+                property_assignment->property_assignment.value = right;
+                
+                // Don't free internal components as they are now owned by property_assignment
+                left->property_access.object = NULL;  // Prevent double-free
+                left->property_access.property = NULL;  // Prevent double-free
+                
+                free(left);  // Free only the property_access struct
+                
+                return property_assignment;
+            }
+            else {
+                // This should not happen given the check above
                 assignment_node->assignment.variable = strdup("<nonVariable>");
             }
 
@@ -759,9 +792,28 @@ ASTNode* parse_statement(Parser* parser) {
         }
     }
 
-    // Match a standalone expression (e.g., function call or binary operation)
+    // Parse an expression (this could be a property access, method call, or other expression)
     ASTNode* expression = parse_expression(parser, 0);
     if (expression) {
+        // Check if this is a property assignment (expr followed by '=')
+        if (expression->type == AST_PROPERTY_ACCESS && 
+            parser->current_token.type == TOKEN_OPERATOR && 
+            strcmp(parser->current_token.value, "=") == 0) {
+            
+            // Handle property assignment: obj.prop = value
+            ASTNode* property_assignment = parse_property_assignment(parser, expression);
+            
+            // Expect a semicolon after the assignment
+            if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
+                report_error(parser, "Expected ';' after property assignment");
+                free_ast(property_assignment);
+                return NULL;
+            }
+            
+            return property_assignment;
+        }
+        
+        // It's a regular expression statement
         // Expect a semicolon after the statement
         if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
             report_error(parser, "Expected ';' after statement");
@@ -1803,6 +1855,13 @@ void print_ast(const ASTNode* node, int depth) {
             }
             break;
 
+        case AST_PROPERTY_ASSIGNMENT:
+            printf("Property Assignment: %s\n", node->property_assignment.property);
+            print_ast(node->property_assignment.object, depth + 1);
+            printf("  Value:\n");
+            print_ast(node->property_assignment.value, depth + 1);
+            break;
+
         default:
             printf("Unknown AST Node Type\n");
             break;
@@ -2136,4 +2195,47 @@ ASTNode* parse_property_or_method(Parser* parser, ASTNode* object) {
 
         return property_access;
     }
+}
+
+ASTNode* parse_property_assignment(Parser* parser, ASTNode* property_access) {
+    // Ensure we have a property access node
+    if (!property_access || property_access->type != AST_PROPERTY_ACCESS) {
+        report_error(parser, "Expected property access for assignment");
+        if (property_access) free_ast(property_access);
+        return NULL;
+    }
+
+    // Expect assignment operator '='
+    if (!match_token(parser, TOKEN_OPERATOR, "=")) {
+        report_error(parser, "Expected '=' for property assignment");
+        free_ast(property_access);
+        return NULL;
+    }
+
+    // Parse the value expression
+    ASTNode* value = parse_expression(parser, 0);
+    if (!value) {
+        report_error(parser, "Failed to parse property assignment value");
+        free_ast(property_access);
+        return NULL;
+    }
+
+    // Create a property assignment node
+    ASTNode* property_assignment = create_ast_node(AST_PROPERTY_ASSIGNMENT);
+    if (!property_assignment) {
+        report_error(parser, "Memory allocation failed for property assignment node");
+        free_ast(property_access);
+        free_ast(value);
+        return NULL;
+    }
+
+    // Move data from property_access to property_assignment
+    property_assignment->property_assignment.object = property_access->property_access.object;
+    property_assignment->property_assignment.property = property_access->property_access.property;
+    property_assignment->property_assignment.value = value;
+    
+    // Don't free internal components as they are now owned by property_assignment
+    free(property_access); // Only free the struct itself, not its contents
+    
+    return property_assignment;
 }

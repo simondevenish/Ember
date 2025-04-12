@@ -1,0 +1,3 @@
+// Simple object initialization test
+var o = { x: { y: "test" }};
+print("o.x.y = " + o.x.y); 

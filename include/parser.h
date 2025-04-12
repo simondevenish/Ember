@@ -24,7 +24,8 @@ typedef enum {
     AST_IMPORT,
     AST_OBJECT_LITERAL,  // Object literal: {a: 1, b: 2}
     AST_PROPERTY_ACCESS, // Property access: obj.prop
-    AST_METHOD_CALL      // Method call: obj.method()
+    AST_METHOD_CALL,     // Method call: obj.method()
+    AST_PROPERTY_ASSIGNMENT  // Property assignment: obj.prop = value
 } ASTNodeType;
 
 // AST Node Structure
@@ -54,6 +55,7 @@ typedef struct ASTNode {
         struct { char** keys; struct ASTNode** values; int property_count; } object_literal; // For AST_OBJECT_LITERAL
         struct { struct ASTNode* object; char* property; } property_access; // For AST_PROPERTY_ACCESS
         struct { struct ASTNode* object; char* method; struct ASTNode** arguments; int argument_count; } method_call; // For AST_METHOD_CALL
+        struct { struct ASTNode* object; char* property; struct ASTNode* value; } property_assignment; // For AST_PROPERTY_ASSIGNMENT
     };
 } ASTNode;
 
@@ -273,5 +275,14 @@ ASTNode* parse_object_literal(Parser* parser);
  * @return ASTNode* The parsed property access or method call node.
  */
 ASTNode* parse_property_or_method(Parser* parser, ASTNode* object);
+
+/**
+ * @brief Parse a property assignment (e.g., obj.prop = value).
+ * 
+ * @param parser The parser instance.
+ * @param property_access The property access node (obj.prop)
+ * @return ASTNode* The parsed property assignment node.
+ */
+ASTNode* parse_property_assignment(Parser* parser, ASTNode* property_access);
 
 #endif // PARSER_H

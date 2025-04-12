@@ -1,0 +1,13 @@
+// Test for direct nested property support
+var obj = {
+    x: { 
+        y: "original"
+    }
+};
+
+print("Initial value: " + obj.x.y);
+
+// This should compile to use OP_SET_NESTED_PROPERTY
+obj.x.y = "updated through nested assignment";
+
+print("After nested assignment: " + obj.x.y); 

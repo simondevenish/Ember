@@ -1,0 +1,54 @@
+// Simple Object Test Script
+// Tests basic object literals, property access, and property assignment
+// These features form the foundation of object-oriented programming in EmberScript
+
+// Create a simple object with properties
+var player = {
+    name: "Hero",
+    health: 100,
+    attack: 15
+};
+
+// Create an enemy object
+var enemy = {
+    name: "Goblin",
+    health: 50,
+    defense: 5
+};
+
+// Test property access
+print("Initial player name: " + player.name);
+
+// Test property assignment
+player.name = "Paladin";
+print("New player name: " + player.name);
+
+// Add a new property dynamically
+player.level = 5;
+print("Player level: " + player.level);
+
+// Test object properties
+print("Player health: " + player.health);
+print("Enemy health: " + enemy.health);
+
+// Create a nested object
+var game = {
+    settings: {
+        difficulty: "Normal",
+        sound: true
+    }
+};
+
+// Test nested property access
+print("Game difficulty: " + game.settings.difficulty);
+
+// Update nested property
+game.settings.difficulty = "Hard";
+print("New game difficulty: " + game.settings.difficulty);
+
+// =====================================================
+// LIMITATIONS:
+// 1. Method definitions inside object literals are not yet supported
+// 2. Function literals are not yet supported
+// 3. 'this' binding inside methods is not yet implemented
+// ===================================================== 

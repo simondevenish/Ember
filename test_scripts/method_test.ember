@@ -1,0 +1,17 @@
+// Testing method calls
+var calculator = {
+    add: function(a, b) {
+        return a + b;
+    },
+    subtract: function(a, b) {
+        return a - b;
+    },
+    multiply: function(a, b) {
+        return a * b;
+    }
+};
+
+// Call methods
+print("Addition: " + calculator.add(5, 3));
+print("Subtraction: " + calculator.subtract(10, 4));
+print("Multiplication: " + calculator.multiply(6, 7)); 

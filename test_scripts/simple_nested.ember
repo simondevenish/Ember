@@ -1,0 +1,20 @@
+// Simple test for nested property assignments
+
+print("=== Testing Nested Properties ===");
+
+// Create object with single level
+var obj = {};
+print("Created empty object");
+
+// Set first level property
+obj.x = {};
+print("Set obj.x = {}");
+
+// Set nested property
+obj.x.y = "nested value";
+print("Set obj.x.y = 'nested value'");
+
+// Read and print the nested property
+print("obj.x.y = " + obj.x.y);
+
+print("=== Test complete ==="); 

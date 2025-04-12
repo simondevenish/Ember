@@ -1,0 +1,19 @@
+// Test using the workaround approach
+
+// Create a simple nested object
+var obj = {
+    x: {
+        y: "original value"
+    }
+};
+
+// Print that we're starting
+print("Starting workaround test");
+
+// Use the workaround approach for nested property assignment
+var inner = obj.x;  // Get inner object
+inner.y = "updated with workaround";  // Modify it
+obj.x = inner;  // Set it back
+
+// Print the updated value
+print("After workaround: " + obj.x.y); 

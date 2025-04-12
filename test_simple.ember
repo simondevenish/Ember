@@ -1,0 +1,3 @@
+// Simple test for nested properties
+print("Testing nested properties");
+// Create object

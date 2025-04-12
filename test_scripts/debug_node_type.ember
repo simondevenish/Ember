@@ -1,0 +1,15 @@
+// Debug script for nested property assignment
+var obj = {
+    x: {
+        y: "original"
+    }
+};
+
+// Print initial value
+print("Initial obj.x.y: " + obj.x.y);
+
+// Set a nested property
+obj.x.y = "updated";
+
+// Print updated value
+print("Updated obj.x.y: " + obj.x.y); 

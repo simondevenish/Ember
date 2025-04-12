@@ -1,0 +1,24 @@
+// Simple nested property assignment test
+
+// Create a simple object
+var obj = {
+    x: {
+        y: "original value"
+    }
+};
+
+// Print that we're starting
+print("Starting test");
+
+// Store the inner object for testing
+var inner = obj.x;
+print("Inner value: " + inner.y);
+
+// Directly assign a new value using our nested property implementation
+obj.x.y = "updated directly";
+
+// Get the inner object again
+var inner2 = obj.x;
+
+// Print result
+print("After assignment: " + inner2.y); 

@@ -1,0 +1,89 @@
+// EmberScript Direct Nested Property Test
+// Tests the newly implemented direct nested property support in the VM
+
+print("==== Direct Nested Property Assignment Test ====");
+
+// Create test objects with different structures
+var obj1 = {
+    x: {
+        y: "initial value 1"
+    }
+};
+
+var obj2 = {
+    data: {
+        value: "initial value 2",
+        meta: {
+            updated: false
+        }
+    }
+};
+
+var obj3 = {
+    name: "Object 3",
+    props: {
+        inner: {
+            test: "initial value 3"
+        }
+    }
+};
+
+// Test 1: Basic nested property update - direct assignment
+print("\n--- Test 1: Basic nested update ---");
+print("Before: obj1.x.y = " + obj1.x.y);
+
+// Direct assignment using the new feature
+obj1.x.y = "updated value 1";
+
+print("After: obj1.x.y = " + obj1.x.y);
+
+// Test 2: 2-level deep property
+print("\n--- Test 2: 2-level deep update ---");
+print("Before: obj2.data.value = " + obj2.data.value);
+
+// Direct assignment to a nested property 
+obj2.data.value = "updated value 2";
+
+print("After: obj2.data.value = " + obj2.data.value);
+
+// Test 3: 3-level deep property
+print("\n--- Test 3: 3-level deep update ---");
+print("Before: obj2.data.meta.updated = " + obj2.data.meta.updated);
+
+// Direct assignment to a deeply nested property
+obj2.data.meta.updated = true;
+
+print("After: obj2.data.meta.updated = " + obj2.data.meta.updated);
+
+// Test 4: Even deeper nesting (3 levels)
+print("\n--- Test 4: Deep nested update ---");
+print("Before: obj3.props.inner.test = " + obj3.props.inner.test);
+
+// Direct assignment to a deeply nested property
+obj3.props.inner.test = "updated value 3";
+
+print("After: obj3.props.inner.test = " + obj3.props.inner.test);
+
+// Test 5: Create properties that don't exist yet
+print("\n--- Test 5: Creating new nested properties ---");
+
+var obj4 = { a: {} };
+print("Before: obj4.a is empty object");
+
+// Create nested property that doesn't exist yet
+obj4.a.b = { c: "new nested value" };
+
+print("After: obj4.a.b.c = " + obj4.a.b.c);
+
+// Test 6: Chained assignments (if supported)
+print("\n--- Test 6: Chained assignments ---");
+
+var obj5 = { x: { y: { z: 0 } } };
+print("Before: obj5.x.y.z = " + obj5.x.y.z);
+
+// Try a chained assignment
+obj5.x.y.z = 100;
+
+print("After: obj5.x.y.z = " + obj5.x.y.z);
+
+print("\n==== All tests completed ===="); 

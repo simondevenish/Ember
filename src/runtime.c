@@ -15,6 +15,12 @@ typedef HANDLE pthread_t;
 #include "runtime.h"
 #include "utils.h"
 
+// Forward declarations
+static RuntimeValue evaluate_property_access(Environment* env, ASTNode* node);
+static bool set_nested_property(Environment* env, ASTNode* object_node, const char* property, RuntimeValue value);
+static void set_property_at_path(RuntimeValue* obj, const char* prop, RuntimeValue value);
+static bool update_nested_property(const char* var_name, const char* outer_prop, const char* inner_prop, RuntimeValue value, Environment* env);
+
 Environment* runtime_create_environment() {
     // Allocate memory for the environment
     Environment* env = (Environment*)malloc(sizeof(Environment));
@@ -560,37 +566,165 @@ RuntimeValue runtime_evaluate(Environment* env, ASTNode* node) {
         }
         
         case AST_PROPERTY_ACCESS: {
-            // Evaluate the object expression
-            RuntimeValue object = runtime_evaluate(env, node->property_access.object);
+            printf("DEBUG: AST_PROPERTY_ACCESS - property: %s\n", node->property_access.property); fflush(stdout);
+            if (node->property_access.object->type == AST_VARIABLE) {
+                printf("DEBUG: Base object is variable: %s\n", 
+                      node->property_access.object->variable.variable_name); fflush(stdout);
+            } else if (node->property_access.object->type == AST_PROPERTY_ACCESS) {
+                printf("DEBUG: Base object is nested property access: %s\n", 
+                      node->property_access.object->property_access.property); fflush(stdout);
+            }
+            result = evaluate_property_access(env, node);
+            printf("DEBUG: Property access result type: %d\n", result.type); fflush(stdout);
+            if (result.type == RUNTIME_VALUE_STRING && result.string_value) {
+                printf("DEBUG: Property value: %s\n", result.string_value); fflush(stdout);
+            }
+            break;
+        }
+        
+        case AST_PROPERTY_ASSIGNMENT: {
+            RuntimeValue value = runtime_evaluate(env, node->property_assignment.value);
+            ASTNode* obj_node = node->property_assignment.object;
             
-            // Ensure that it's an object
-            if (object.type != RUNTIME_VALUE_OBJECT) {
-                fprintf(stderr, "Error: Cannot access property '%s' of non-object value.\n", 
-                         node->property_access.property);
-                result.type = RUNTIME_VALUE_NULL;
-                break;
+            printf("DEBUG: Property Assignment - setting '%s' to ", node->property_assignment.property); fflush(stdout);
+            if (value.type == RUNTIME_VALUE_STRING) {
+                printf("'%s'\n", value.string_value); fflush(stdout);
+            } else {
+                printf("value of type %d\n", value.type); fflush(stdout);
             }
             
-            // Look for the property in the object
+            if (obj_node->type == AST_PROPERTY_ACCESS) {
+                printf("DEBUG: Target is property access: '%s'\n", obj_node->property_access.property); fflush(stdout);
+                
+                // Let's handle the simplest case first: obj.x.y = z where obj is a variable
+                if (obj_node->property_access.object->type == AST_VARIABLE) {
+                    const char* var_name = obj_node->property_access.object->variable.variable_name;
+                    const char* prop_name = obj_node->property_access.property;
+                    const char* nested_prop = node->property_assignment.property;
+                    
+                    printf("DEBUG: Setting %s.%s.%s\n", var_name, prop_name, nested_prop); fflush(stdout);
+                    
+                    // Get the root object
+                    RuntimeValue* root_obj_ptr = runtime_get_variable(env, var_name);
+                    if (!root_obj_ptr || root_obj_ptr->type != RUNTIME_VALUE_OBJECT) {
+                        fprintf(stderr, "Error: Cannot access property of non-object variable: %s\n", var_name);
+                        result.type = RUNTIME_VALUE_NULL;
+                        return result;
+                    }
+                    
+                    // Make a copy of the root object so we can modify it
+                    RuntimeValue root_obj = runtime_value_copy(root_obj_ptr);
+                    
+                    // Find the inner object (obj.x)
+                    bool found_inner = false;
+                    int inner_index = -1;
+                    for (int i = 0; i < root_obj.object_value.count; i++) {
+                        if (strcmp(root_obj.object_value.keys[i], prop_name) == 0) {
+                            inner_index = i;
+                            found_inner = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found_inner) {
+                        fprintf(stderr, "Error: Property not found: %s.%s\n", var_name, prop_name);
+                        runtime_free_value(&root_obj);
+                        result.type = RUNTIME_VALUE_NULL;
+                        return result;
+                    }
+                    
+                    // Check if the inner property is an object
+                    if (root_obj.object_value.values[inner_index].type != RUNTIME_VALUE_OBJECT) {
+                        fprintf(stderr, "Error: Property is not an object: %s.%s\n", var_name, prop_name);
+                        runtime_free_value(&root_obj);
+                        result.type = RUNTIME_VALUE_NULL;
+                        return result;
+                    }
+                    
+                    // Set the nested property on the inner object
+                    RuntimeValue* inner_obj = &root_obj.object_value.values[inner_index];
+                    bool found_nested = false;
+                    for (int i = 0; i < inner_obj->object_value.count; i++) {
+                        if (strcmp(inner_obj->object_value.keys[i], nested_prop) == 0) {
+                            // Replace the existing value
+                            runtime_free_value(&inner_obj->object_value.values[i]);
+                            inner_obj->object_value.values[i] = runtime_value_copy(&value);
+                            found_nested = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found_nested) {
+                        // Add the new property
+                        int new_index = inner_obj->object_value.count;
+                        inner_obj->object_value.count++;
+                        inner_obj->object_value.keys = realloc(inner_obj->object_value.keys, 
+                                                             inner_obj->object_value.count * sizeof(char*));
+                        inner_obj->object_value.values = realloc(inner_obj->object_value.values, 
+                                                               inner_obj->object_value.count * sizeof(RuntimeValue));
+                        
+                        inner_obj->object_value.keys[new_index] = strdup(nested_prop);
+                        inner_obj->object_value.values[new_index] = runtime_value_copy(&value);
+                    }
+                    
+                    // Update the root object in the environment
+                    runtime_set_variable(env, var_name, root_obj);
+                    printf("DEBUG: Updated nested property %s.%s.%s\n", var_name, prop_name, nested_prop); fflush(stdout);
+                    
+                    // Cleanup
+                    runtime_free_value(&root_obj);
+                    
+                    return value;
+                } else {
+                    printf("DEBUG: Complex nested property assignment not fully implemented\n"); fflush(stdout);
+                    // This is a more complex case (e.g. (expr).prop.inner = value)
+                    // Implement this later if needed
+                }
+            }
+            
+            // Handle normal property assignment (obj.prop = value)
+            RuntimeValue object = runtime_evaluate(env, obj_node);
+            
+            if (object.type != RUNTIME_VALUE_OBJECT) {
+                fprintf(stderr, "Error: Cannot set property on non-object\n");
+                result.type = RUNTIME_VALUE_NULL;
+                return result;
+            }
+            
+            // Find and update the property
             bool found = false;
             for (int i = 0; i < object.object_value.count; i++) {
-                if (strcmp(object.object_value.keys[i], node->property_access.property) == 0) {
-                    // Found the property, return its value
-                    result = runtime_value_copy(&object.object_value.values[i]);
+                if (strcmp(object.object_value.keys[i], node->property_assignment.property) == 0) {
+                    // Replace the value
+                    runtime_free_value(&object.object_value.values[i]);
+                    object.object_value.values[i] = runtime_value_copy(&value);
                     found = true;
                     break;
                 }
             }
             
             if (!found) {
-                fprintf(stderr, "Error: Object has no property '%s'.\n", 
-                         node->property_access.property);
-                result.type = RUNTIME_VALUE_NULL;
+                // Add new property
+                int new_index = object.object_value.count;
+                object.object_value.count++;
+                object.object_value.keys = realloc(object.object_value.keys,
+                                                 object.object_value.count * sizeof(char*));
+                object.object_value.values = realloc(object.object_value.values,
+                                                   object.object_value.count * sizeof(RuntimeValue));
+                
+                object.object_value.keys[new_index] = strdup(node->property_assignment.property);
+                object.object_value.values[new_index] = runtime_value_copy(&value);
             }
             
-            break;
+            // If this is a direct variable reference, update the variable
+            if (obj_node->type == AST_VARIABLE) {
+                const char* var_name = obj_node->variable.variable_name;
+                runtime_set_variable(env, var_name, object);
+            }
+            
+            // For property assignments, the result is the value being assigned
+            return value;
         }
-        
         case AST_METHOD_CALL: {
             // Evaluate the object expression
             RuntimeValue object = runtime_evaluate(env, node->method_call.object);
@@ -1389,4 +1523,389 @@ void runtime_trigger_event(Environment* env, RuntimeEvent* event) {
 
     // If we reached here, no handler was found for the event
     fprintf(stderr, "Warning: No handler found for event '%s'.\n", event->event_name);
+}
+
+// -----------------------------
+// Property Access Helper
+// -----------------------------
+static RuntimeValue evaluate_property_access(Environment* env, ASTNode* node) {
+    if (node->type != AST_PROPERTY_ACCESS) {
+        fprintf(stderr, "Error: evaluate_property_access called on non-property access node\n");
+        RuntimeValue result;
+        result.type = RUNTIME_VALUE_NULL;
+        return result;
+    }
+    
+    printf("DEBUG: Accessing property: %s\n", node->property_access.property); fflush(stdout);
+    
+    // Evaluate the object expression
+    RuntimeValue object = runtime_evaluate(env, node->property_access.object);
+    
+    printf("DEBUG: Object type: %d\n", object.type); fflush(stdout);
+    
+    // Ensure that it's an object
+    if (object.type != RUNTIME_VALUE_OBJECT) {
+        fprintf(stderr, "Error: Cannot access property '%s' of non-object value.\n", 
+                 node->property_access.property);
+        runtime_free_value(&object);
+        RuntimeValue result;
+        result.type = RUNTIME_VALUE_NULL;
+        return result;
+    }
+    
+    printf("DEBUG: Object has %d properties\n", object.object_value.count); fflush(stdout);
+    for (int i = 0; i < object.object_value.count; i++) {
+        printf("DEBUG: Property %d: '%s'\n", i, object.object_value.keys[i]); fflush(stdout);
+    }
+    
+    // Look for the property in the object
+    bool found = false;
+    RuntimeValue result;
+    
+    for (int i = 0; i < object.object_value.count; i++) {
+        if (strcmp(object.object_value.keys[i], node->property_access.property) == 0) {
+            // Found the property, return its value
+            result = runtime_value_copy(&object.object_value.values[i]);
+            printf("DEBUG: Found property '%s' with type %d\n", 
+                  node->property_access.property, result.type); fflush(stdout);
+            
+            if (result.type == RUNTIME_VALUE_STRING && result.string_value != NULL) {
+                printf("DEBUG: Property value is string: '%s'\n", result.string_value); fflush(stdout);
+            }
+            
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        fprintf(stderr, "Error: Object has no property '%s'.\n", node->property_access.property);
+        result.type = RUNTIME_VALUE_NULL;
+    }
+    
+    runtime_free_value(&object);
+    return result;
+}
+
+// -----------------------------
+// Set Nested Property Helper
+// -----------------------------
+static bool set_nested_property(Environment* env, ASTNode* object_node, const char* property, RuntimeValue value) {
+    printf("DEBUG: set_nested_property called with property '%s'\n", property);
+    
+    if (object_node->type == AST_VARIABLE) {
+        // Simple case: variable.property
+        char* var_name = object_node->variable.variable_name;
+        printf("DEBUG: Simple case - Setting %s.%s\n", var_name, property);
+        RuntimeValue* var_ptr = runtime_get_variable(env, var_name);
+        
+        if (!var_ptr || var_ptr->type != RUNTIME_VALUE_OBJECT) {
+            printf("DEBUG: Variable '%s' not found or not an object\n", var_name);
+            return false;
+        }
+        
+        RuntimeValue var_copy = runtime_value_copy(var_ptr);
+        
+        // Find or add the property
+        bool found = false;
+        for (int i = 0; i < var_copy.object_value.count; i++) {
+            if (strcmp(var_copy.object_value.keys[i], property) == 0) {
+                printf("DEBUG: Found property '%s' in variable '%s'\n", property, var_name);
+                runtime_free_value(&var_copy.object_value.values[i]);
+                var_copy.object_value.values[i] = runtime_value_copy(&value);
+                found = true;
+                break;
+            }
+        }
+        
+        if (!found) {
+            // Add new property
+            int new_count = var_copy.object_value.count + 1;
+            char** new_keys = realloc(var_copy.object_value.keys, sizeof(char*) * new_count);
+            RuntimeValue* new_values = realloc(var_copy.object_value.values, sizeof(RuntimeValue) * new_count);
+            
+            if (!new_keys || !new_values) {
+                runtime_free_value(&var_copy);
+                return false;
+            }
+            
+            var_copy.object_value.keys = new_keys;
+            var_copy.object_value.values = new_values;
+            var_copy.object_value.keys[var_copy.object_value.count] = strdup(property);
+            var_copy.object_value.values[var_copy.object_value.count] = runtime_value_copy(&value);
+            var_copy.object_value.count = new_count;
+        }
+        
+        // Update the variable
+        runtime_set_variable(env, var_name, var_copy);
+        runtime_free_value(&var_copy);
+        
+        return true;
+    }
+    else if (object_node->type == AST_PROPERTY_ACCESS) {
+        // Nested case: obj.inner.property
+        char* inner_prop = object_node->property_access.property;
+        ASTNode* outer_obj = object_node->property_access.object;
+        
+        printf("DEBUG: Nested case - obj.%s.%s\n", inner_prop, property);
+        
+        if (outer_obj->type == AST_VARIABLE) {
+            char* var_name = outer_obj->variable.variable_name;
+            printf("DEBUG: Root object is variable '%s'\n", var_name);
+        } else {
+            printf("DEBUG: Root object is not a variable, type %d\n", outer_obj->type);
+        }
+        
+        // Get the outer object
+        RuntimeValue outer = runtime_evaluate(env, outer_obj);
+        if (outer.type != RUNTIME_VALUE_OBJECT) {
+            printf("DEBUG: Outer object is not an object, type %d\n", outer.type);
+            runtime_free_value(&outer);
+            return false;
+        }
+        
+        // Find the inner object
+        printf("DEBUG: Looking for inner property '%s' in outer object\n", inner_prop);
+        printf("DEBUG: Outer object has %d properties\n", outer.object_value.count);
+        for (int i = 0; i < outer.object_value.count; i++) {
+            printf("DEBUG: Outer object property %d: '%s'\n", i, outer.object_value.keys[i]);
+        }
+        
+        bool found_inner = false;
+        int inner_idx = -1;
+        for (int i = 0; i < outer.object_value.count; i++) {
+            if (strcmp(outer.object_value.keys[i], inner_prop) == 0) {
+                printf("DEBUG: Found inner property '%s'\n", inner_prop);
+                if (outer.object_value.values[i].type != RUNTIME_VALUE_OBJECT) {
+                    printf("DEBUG: Inner property '%s' is not an object, type %d\n", 
+                          inner_prop, outer.object_value.values[i].type);
+                    runtime_free_value(&outer);
+                    return false;
+                }
+                found_inner = true;
+                inner_idx = i;
+                break;
+            }
+        }
+        
+        if (!found_inner) {
+            runtime_free_value(&outer);
+            return false;
+        }
+        
+        // Update or add the property in the inner object
+        RuntimeValue* inner_obj = &outer.object_value.values[inner_idx];
+        printf("DEBUG: Inner object has %d properties\n", inner_obj->object_value.count);
+        for (int i = 0; i < inner_obj->object_value.count; i++) {
+            printf("DEBUG: Inner object property %d: '%s'\n", i, inner_obj->object_value.keys[i]);
+        }
+        
+        // Find or add the property in the inner object
+        bool found_prop = false;
+        for (int i = 0; i < inner_obj->object_value.count; i++) {
+            if (strcmp(inner_obj->object_value.keys[i], property) == 0) {
+                // Update
+                printf("DEBUG: Found property '%s' in inner object, updating\n", property);
+                runtime_free_value(&inner_obj->object_value.values[i]);
+                inner_obj->object_value.values[i] = runtime_value_copy(&value);
+                if (value.type == RUNTIME_VALUE_STRING) {
+                    printf("DEBUG: Updated to string value: '%s'\n", 
+                              value.string_value);
+                }
+                found_prop = true;
+                break;
+            }
+        }
+        
+        if (!found_prop) {
+            // Add new
+            int new_count = inner_obj->object_value.count + 1;
+            char** new_keys = realloc(inner_obj->object_value.keys, sizeof(char*) * new_count);
+            RuntimeValue* new_values = realloc(inner_obj->object_value.values, sizeof(RuntimeValue) * new_count);
+            
+            if (!new_keys || !new_values) {
+                runtime_free_value(&outer);
+                return false;
+            }
+            
+            inner_obj->object_value.keys = new_keys;
+            inner_obj->object_value.values = new_values;
+            inner_obj->object_value.keys[inner_obj->object_value.count] = strdup(property);
+            inner_obj->object_value.values[inner_obj->object_value.count] = runtime_value_copy(&value);
+            inner_obj->object_value.count = new_count;
+        }
+        
+        // Now update the original variable that contains the outer object
+        if (outer_obj->type == AST_VARIABLE) {
+            char* var_name = outer_obj->variable.variable_name;
+            runtime_set_variable(env, var_name, outer);
+        }
+        else {
+            // For deeply nested access, this won't work well
+            // We would need a more complex approach
+            runtime_free_value(&outer);
+            return false;
+        }
+        
+        runtime_free_value(&outer);
+        return true;
+    }
+    
+    return false;
+}
+
+// Simple direct function to set a nested property
+static void set_property_at_path(RuntimeValue* obj, const char* prop, RuntimeValue value) {
+    if (!obj || !prop) {
+        fprintf(stderr, "Error: NULL object or property name in set_property_at_path\n");
+        return;
+    }
+
+    if (obj->type != RUNTIME_VALUE_OBJECT) {
+        fprintf(stderr, "Error: Cannot set property '%s' on non-object value\n", prop);
+        return;
+    }
+
+    // Look for the property in the object
+    bool found = false;
+    
+    // Check if the property already exists
+    for (int i = 0; i < obj->object_value.count; i++) {
+        if (strcmp(obj->object_value.keys[i], prop) == 0) {
+            // Update existing property
+            runtime_free_value(&obj->object_value.values[i]);  // Free existing value
+            obj->object_value.values[i] = runtime_value_copy(&value);  // Set new value
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        // Property doesn't exist, add it
+        int newCount = obj->object_value.count + 1;
+        
+        // Expand keys array
+        char** newKeys = realloc(
+            obj->object_value.keys,
+            newCount * sizeof(char*)
+        );
+        if (!newKeys) {
+            fprintf(stderr, "Error: Object property keys reallocation failed.\n");
+            return;
+        }
+        
+        // Expand values array
+        RuntimeValue* newValues = realloc(
+            obj->object_value.values,
+            newCount * sizeof(RuntimeValue)
+        );
+        if (!newValues) {
+            fprintf(stderr, "Error: Object property values reallocation failed.\n");
+            free(newKeys);
+            return;
+        }
+        
+        // Add the new property
+        newKeys[obj->object_value.count] = strdup(prop);
+        newValues[obj->object_value.count] = runtime_value_copy(&value);
+        
+        // Update the object
+        obj->object_value.keys = newKeys;
+        obj->object_value.values = newValues;
+        obj->object_value.count = newCount;
+    }
+}
+
+/**
+ * Helper function to update a nested property (obj.x.y) format
+ * 
+ * @param var_name The name of the root variable (e.g., "obj")
+ * @param outer_prop The name of the outer property (e.g., "x")
+ * @param inner_prop The name of the inner property (e.g., "y")
+ * @param value The value to assign to the inner property
+ * @param env The current environment
+ * @return true if successful, false if there was an error
+ */
+static bool update_nested_property(const char* var_name, const char* outer_prop, const char* inner_prop, RuntimeValue value, Environment* env) {
+    printf("DEBUG: update_nested_property: %s.%s.%s\n", var_name, outer_prop, inner_prop); fflush(stdout);
+    
+    // Get the variable from the environment
+    RuntimeValue* var_ptr = runtime_get_variable(env, var_name);
+    if (!var_ptr || var_ptr->type != RUNTIME_VALUE_OBJECT) {
+        fprintf(stderr, "Error: Variable '%s' not found or not an object\n", var_name); fflush(stderr);
+        return false;
+    }
+    
+    printf("DEBUG: Found variable '%s' in environment\n", var_name); fflush(stdout);
+    
+    // Make a copy of the variable
+    RuntimeValue var_copy = runtime_value_copy(var_ptr);
+    
+    printf("DEBUG: Variable has %d properties\n", var_copy.object_value.count); fflush(stdout);
+    for (int i = 0; i < var_copy.object_value.count; i++) {
+        printf("DEBUG: Property %d: '%s'\n", i, var_copy.object_value.keys[i]); fflush(stdout);
+    }
+    
+    // Find the outer property (e.g., "x" in obj.x.y)
+    bool found_outer = false;
+    for (int i = 0; i < var_copy.object_value.count; i++) {
+        if (strcmp(var_copy.object_value.keys[i], outer_prop) == 0) {
+            found_outer = true;
+            printf("DEBUG: Found outer property '%s' at index %d\n", outer_prop, i); fflush(stdout);
+            
+            // Make sure it's an object
+            if (var_copy.object_value.values[i].type != RUNTIME_VALUE_OBJECT) {
+                fprintf(stderr, "Error: Property '%s' is not an object\n", outer_prop); fflush(stderr);
+                runtime_free_value(&var_copy);
+                return false;
+            }
+            
+            printf("DEBUG: Outer property '%s' is an object with %d properties\n", 
+                  outer_prop, var_copy.object_value.values[i].object_value.count); fflush(stdout);
+            
+            for (int j = 0; j < var_copy.object_value.values[i].object_value.count; j++) {
+                printf("DEBUG: Inner property %d: '%s'\n", j, 
+                      var_copy.object_value.values[i].object_value.keys[j]); fflush(stdout);
+            }
+            
+            // Update the inner property in the inner object
+            printf("DEBUG: Setting inner property '%s'\n", inner_prop); fflush(stdout);
+            set_property_at_path(&(var_copy.object_value.values[i]), inner_prop, value);
+            
+            // Debug the inner object after update
+            printf("DEBUG: Inner object after update has %d properties\n", 
+                  var_copy.object_value.values[i].object_value.count); fflush(stdout);
+                  
+            for (int j = 0; j < var_copy.object_value.values[i].object_value.count; j++) {
+                printf("DEBUG: After update - Inner property %d: '%s'\n", j, 
+                      var_copy.object_value.values[i].object_value.keys[j]); fflush(stdout);
+                
+                if (strcmp(var_copy.object_value.values[i].object_value.keys[j], inner_prop) == 0) {
+                    printf("DEBUG: Found updated property '%s'\n", inner_prop); fflush(stdout);
+                    
+                    if (var_copy.object_value.values[i].object_value.values[j].type == RUNTIME_VALUE_STRING) {
+                        printf("DEBUG: Updated value is string: '%s'\n", 
+                              var_copy.object_value.values[i].object_value.values[j].string_value); fflush(stdout);
+                    }
+                }
+            }
+            
+            break;
+        }
+    }
+    
+    if (!found_outer) {
+        fprintf(stderr, "Error: Property '%s' not found in object '%s'\n", outer_prop, var_name); fflush(stderr);
+        runtime_free_value(&var_copy);
+        return false;
+    }
+    
+    // Update the variable in the environment
+    runtime_set_variable(env, var_name, var_copy);
+    printf("DEBUG: Updated variable '%s' in environment with new nested property value\n", var_name); fflush(stdout);
+    
+    // Clean up
+    runtime_free_value(&var_copy);
+    
+    return true;
 }

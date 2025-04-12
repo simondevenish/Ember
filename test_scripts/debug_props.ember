@@ -1,0 +1,8 @@
+// Debug script for object properties
+var obj = {};
+print("Created empty object");
+
+obj.x = "test";
+print("Set obj.x = test");
+
+print("obj.x = " + obj.x); 

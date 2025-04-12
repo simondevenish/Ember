@@ -1,0 +1,7 @@
+// Basic object test 
+var o = {};
+print("Created object");
+
+// Add a property
+o.test = "hello";
+print("Added o.test = " + o.test); 

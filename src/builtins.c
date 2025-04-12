@@ -7,7 +7,6 @@
 #include "builtins.h"
 #include "utils.h"
 #include "runtime.h"
-#include "sdl_module.h"
 #include "raylib_module.h" // Our new module
 
 /**
@@ -36,22 +35,10 @@ void builtins_register(Environment* env) {
     runtime_register_builtin(env, "index_of", builtin_index_of);
     runtime_register_builtin(env, "replace", builtin_replace);
 
-    // --------------------------------------------
-    // Conditionally register the SDL module if installed
-    // --------------------------------------------
-    if (is_sdl_installed()) {
-        sdl_register_builtins(env);
-    }
-
+    // Register raylib builtins if installed
     if (utils_is_package_installed("raylib")) {
         raylib_register_builtins(env);
     }
-}
-
-bool is_sdl_installed(void)
-{
-    // ember/sdl -> embersdl quick hack to test functionality whilst '/' gets fixed
-    return utils_is_package_installed("embersdl");
 }
 
 RuntimeValue builtin_floor(Environment* env, RuntimeValue* args, int arg_count) {

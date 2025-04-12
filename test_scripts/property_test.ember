@@ -9,4 +9,22 @@ print(obj.name);
 
 // NOTE: The assignment doesn't work yet
 //obj.name = "updated";
-//print(obj.name); 
+//print(obj.name);
+
+// Testing property assignment in isolation
+var obj = { name: "Test Object" };
+
+// Print initial value
+print("Initial name: " + obj.name);
+
+// Assign new value
+obj.name = "Modified Name";
+
+// Print new value
+print("New name: " + obj.name);
+
+// Add a new property
+obj.count = 42;
+
+// Print the new property
+print("Count: " + obj.count); 

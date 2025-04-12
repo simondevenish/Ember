@@ -84,7 +84,7 @@ static int emit_jump(BytecodeChunk* chunk, uint8_t jumpOp) {
 }
 
 static void patch_jump(BytecodeChunk* chunk, int offset) {
-    // Calculate how far to jump from “offset” to the end of the chunk
+    // Calculate how far to jump from "offset" to the end of the chunk
     int jump_distance = chunk->code_count - offset - 2; 
     // Overwrite the placeholder bytes
     chunk->code[offset]   = (jump_distance >> 8) & 0xFF;
@@ -180,7 +180,7 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             break;
         }
         case AST_FUNCTION_CALL: {
-            // Special-case “print(…)" as a builtin
+            // Special-case "print(…)" as a builtin
             // TODO(SD) this is an example placeholder
             if (strcmp(node->function_call.function_name, "print") == 0) {
                 // Evaluate the arguments (for adventure_game.ember, we assume 1 arg)
@@ -242,8 +242,139 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             }
             break;
         }
+        case AST_OBJECT_LITERAL: {
+            // Create a new object
+            emit_byte(chunk, OP_NEW_OBJECT);
+
+            // Add each property to the object
+            for (int i = 0; i < node->object_literal.property_count; i++) {
+                // Duplicate the object reference on the stack
+                emit_byte(chunk, OP_DUP);
+                
+                // Push property key (as string constant)
+                RuntimeValue key_val;
+                key_val.type = RUNTIME_VALUE_STRING;
+                key_val.string_value = strdup(node->object_literal.keys[i]);
+                emit_constant(chunk, key_val);
+                
+                // Evaluate the property value expression
+                compile_expression(node->object_literal.values[i], chunk, symtab);
+                
+                // Set property on object
+                emit_byte(chunk, OP_SET_PROPERTY);
+            }
+            
+            // The resulting object is on the stack top
+            break;
+        }
+        case AST_PROPERTY_ACCESS: {
+            // Compile the object expression
+            compile_expression(node->property_access.object, chunk, symtab);
+            
+            // Push the property name (as string constant)
+            RuntimeValue prop_val;
+            prop_val.type = RUNTIME_VALUE_STRING;
+            prop_val.string_value = strdup(node->property_access.property);
+            emit_constant(chunk, prop_val);
+            
+            // Get property from object
+            emit_byte(chunk, OP_GET_PROPERTY);
+            break;
+        }
+        case AST_METHOD_CALL: {
+            // Compile the object expression
+            compile_expression(node->method_call.object, chunk, symtab);
+            
+            // Duplicate the object reference for the 'this' context
+            emit_byte(chunk, OP_DUP);
+            
+            // Push the method name (as string constant)
+            RuntimeValue method_val;
+            method_val.type = RUNTIME_VALUE_STRING;
+            method_val.string_value = strdup(node->method_call.method);
+            emit_constant(chunk, method_val);
+            
+            // Get method from object
+            emit_byte(chunk, OP_GET_PROPERTY);
+            
+            // Push arguments (left->right)
+            for (int i = 0; i < node->method_call.argument_count; i++) {
+                compile_expression(node->method_call.arguments[i], chunk, symtab);
+            }
+            
+            // Call method with object as 'this' context
+            // Stack: [object, method, arg1, arg2, ..., argN]
+            emit_byte(chunk, OP_CALL_METHOD);
+            emit_byte(chunk, (uint8_t)node->method_call.argument_count);
+            break;
+        }
+        case AST_PROPERTY_ASSIGNMENT: {
+            printf("DEBUG: Compiling AST_PROPERTY_ASSIGNMENT\n");
+            
+            // Check if this is a nested property access (obj.x.y = value)
+            if (node->property_assignment.object->type == AST_PROPERTY_ACCESS) {
+                printf("DEBUG: Detected nested property access in compiler\n");
+                
+                // Extract the complete property path for the nested assignment
+                char path_buffer[256] = {0}; // Buffer to build the full path
+                ASTNode* current = node->property_assignment.object;
+                const char* innerProp = node->property_assignment.property; // The final property in the chain
+                
+                // Build the property path from right to left
+                strcpy(path_buffer, innerProp);
+                
+                // Traverse the property access chain to build the full path
+                while (current->type == AST_PROPERTY_ACCESS) {
+                    // Need to prepend the current property with a dot
+                    char temp[256];
+                    snprintf(temp, sizeof(temp), "%s.%s", current->property_access.property, path_buffer);
+                    strcpy(path_buffer, temp);
+                    
+                    // Move to the next object in the chain
+                    current = current->property_access.object;
+                }
+                
+                // At this point, current should be the base object and path_buffer contains the full path
+                // e.g., "x.y.z" for obj.x.y.z = value
+                printf("DEBUG: Built nested property path: %s\n", path_buffer);
+                
+                // 1. Get the base object (obj)
+                compile_expression(current, chunk, symtab);
+                
+                // 2. Push the full property path as a string
+                RuntimeValue path_val;
+                path_val.type = RUNTIME_VALUE_STRING;
+                path_val.string_value = strdup(path_buffer);
+                emit_constant(chunk, path_val);
+                
+                // 3. Compile the value to assign
+                compile_expression(node->property_assignment.value, chunk, symtab);
+                
+                // 4. Use the dedicated nested property setter instruction
+                emit_byte(chunk, OP_SET_NESTED_PROPERTY);
+            }
+            else {
+                // Regular property assignment (obj.prop = value)
+                
+                // 1. Compile the object expression
+                compile_expression(node->property_assignment.object, chunk, symtab);
+                
+                // 2. Push the property name (as string constant)
+                RuntimeValue prop_val;
+                prop_val.type = RUNTIME_VALUE_STRING;
+                prop_val.string_value = strdup(node->property_assignment.property);
+                emit_constant(chunk, prop_val);
+                
+                // 3. Compile the value to assign
+                compile_expression(node->property_assignment.value, chunk, symtab);
+                
+                // 4. Use regular property setter for direct assignments
+                emit_byte(chunk, OP_SET_PROPERTY);
+            }
+            break;
+        }
         default:
-            // If we see a statement node in an expression context, that’s likely a parse mismatch
+            // If we see a statement node in an expression context, that's likely a parse mismatch
             fprintf(stderr, "Compiler error: Unexpected node type %d in expression.\n", node->type);
             break;
     }
@@ -276,7 +407,11 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
         case AST_INDEX_ACCESS:
         case AST_UNARY_OP:
         case AST_LITERAL:
-        case AST_VARIABLE: {
+        case AST_VARIABLE:
+        case AST_OBJECT_LITERAL:
+        case AST_PROPERTY_ACCESS:
+        case AST_METHOD_CALL:
+        case AST_PROPERTY_ASSIGNMENT: {
             // Expression statement
             compile_expression(node, chunk, symtab);
             // pop result (unless we want to keep it)
@@ -473,10 +608,10 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             //      store that label in a constant or symbol table, then store it in a variable.
             //
             // For adventure_game.ember, we _do_ have function definitions. Let's store them as
-            // “functionName -> instruction pointer offset” in the symbol table. We'll place
-            // them in a separate “jump over function” block for now.
+            // "functionName -> instruction pointer offset" in the symbol table. We'll place
+            // them in a separate "jump over function" block for now.
             //
-            // For simplicity, we’ll do nothing but store a “null” if we just want to parse it
+            // For simplicity, we'll do nothing but store a "null" if we just want to parse it
             // without actually using VM calls. The example below does a partial approach.
             //
             // Better approach is: 
@@ -484,7 +619,7 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             //   - compile the function body (like a mini chunk)
             //   - store function meta in the symtab
             //   - when calling, jump to that IP, then jump back
-            // But that’s more advanced than we want for the first pass. 
+            // But that's more advanced than we want for the first pass. 
             //
             // Let's do a do-nothing placeholder so we can parse the script successfully:
             int funcIndex = symbol_table_get_or_add(symtab, node->function_def.function_name, true);
@@ -535,6 +670,10 @@ static void compile_node(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symta
         case AST_VARIABLE:
         case AST_IMPORT:
         case AST_SWITCH_CASE:
+        case AST_OBJECT_LITERAL:
+        case AST_PROPERTY_ACCESS:
+        case AST_METHOD_CALL:
+        case AST_PROPERTY_ASSIGNMENT:
             compile_statement(node, chunk, symtab);
             break;
 

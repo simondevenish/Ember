@@ -54,6 +54,7 @@ typedef enum {
     // Function calls and returns
     OP_CALL,             // Call a function (may include arg count)
     OP_RETURN,           // Return from function (pop stack frame, etc.)
+    OP_CALL_METHOD,      // Call a method with 'this' context
 
     // Objects, arrays, indexing
     OP_NEW_ARRAY,        // Create a new array
@@ -62,6 +63,7 @@ typedef enum {
     OP_SET_INDEX,        // a[b] = c
     OP_NEW_OBJECT,       // Create a new object/map/dict
     OP_SET_PROPERTY,     // object.prop = value
+    OP_SET_NESTED_PROPERTY, // object.prop1.prop2... = value (for nested properties)
     OP_GET_PROPERTY,     // push object.prop
 
     // Type conversions, printing, etc. (examples)
@@ -72,7 +74,10 @@ typedef enum {
     OP_YIELD,
     OP_RESUME,
 
-    // Additional placeholders
+    // Function related
+    OP_CALL_FUNCTION,    // Call a function
+
+    // Unused placeholders
     OP_THROW,            // Throw an error
     OP_TRY_CATCH         // Possibly a try-catch block in the future??
 } OpCode;
@@ -101,7 +106,7 @@ typedef struct {
  * - `stack` array for push/pop
  * - `stack_top` to track the current top
  * - The current instruction pointer (IP)
- * - Possibly a pointer to Environment for variables, or a specialized “CallFrame” array
+ * - Possibly a pointer to Environment for variables, or a specialized "CallFrame" array
  */
 typedef struct {
     BytecodeChunk* chunk; ///< The chunk of bytecode we're executing

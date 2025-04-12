@@ -1,0 +1,25 @@
+// Simple nested property test
+// Testing just the most basic nested property access and assignment
+
+// Create a simple nested object
+var obj = {
+    x: {
+        y: "original"
+    }
+};
+
+// Print initial value
+print("Initial obj.x.y: " + obj.x.y);
+
+/* 
+ * Use the workaround approach for nested property assignment in VM:
+ * 1. Get the inner object (obj.x)
+ * 2. Update its property (inner.y = value)
+ * 3. Set it back to the original object (obj.x = inner)
+ */
+var inner = obj.x;  // Get the inner object
+inner.y = "updated";  // Update the property
+obj.x = inner;  // Set it back to the original object
+
+// Verify the update
+print("Updated obj.x.y: " + obj.x.y); 

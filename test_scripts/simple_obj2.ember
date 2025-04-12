@@ -1,0 +1,5 @@
+// Test simple object step by step
+var o = {}; // Empty object
+o.x = {}; // Empty nested object
+o.x.y = "test"; // set nested property 
+print("o.x.y = " + o.x.y); 

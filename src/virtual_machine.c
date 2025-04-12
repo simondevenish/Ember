@@ -1,8 +1,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 
 #include "virtual_machine.h"
+#include "runtime.h"
+
+// Forward declarations for runtime functions
+extern RuntimeValue runtime_value_copy(const RuntimeValue* value);
+extern void runtime_free_value(RuntimeValue* value);
+
+// Forward declarations
+static void print_runtime_value_type(const char* label, const RuntimeValue* value);
+
+// Forward declaration of helper functions
+static bool update_globals_after_property_op(RuntimeValue* original, RuntimeValue* modified);
+static RuntimeValue vm_get_property(RuntimeValue obj, const char* prop);
+static void vm_add_property(RuntimeValue* obj, const char* propName, RuntimeValue* value);
+static int json_stringify_value(const RuntimeValue* value, char* buffer, size_t buffer_size);
 
 /* ----------------
    Chunk Functions
@@ -122,45 +137,527 @@ void vm_push(VM* vm, RuntimeValue value) {
         fprintf(stderr, "VM Error: Stack overflow.\n");
         return;
     }
-    *vm->stack_top = value;
+    *vm->stack_top = runtime_value_copy(&value);
     vm->stack_top++;
 }
 
 RuntimeValue vm_pop(VM* vm) {
-    // Check for underflow
-    if (vm->stack_top == vm->stack) {
+    if (vm->stack_top <= vm->stack) {
         fprintf(stderr, "VM Error: Stack underflow.\n");
-        RuntimeValue v; v.type = RUNTIME_VALUE_NULL;
-        return v;
+        RuntimeValue error = {.type = RUNTIME_VALUE_NULL};
+        return error;
     }
     vm->stack_top--;
+    
+    // Debug what we're popping
+    print_runtime_value_type("Popping from stack", vm->stack_top);
+    
     return *vm->stack_top;
 }
 
+/**
+ * @brief Peek at a value on the stack without popping it.
+ *
+ * @param vm The VM instance.
+ * @param distance How far from the top of the stack (0 = top).
+ * @return RuntimeValue The value at that position.
+ */
 static RuntimeValue vm_peek(VM* vm, int distance) {
-    // distance=0 => top
+    if (vm->stack_top - distance - 1 < vm->stack) {
+        fprintf(stderr, "VM Error: Stack underflow in peek.\n");
+        RuntimeValue error = {.type = RUNTIME_VALUE_NULL};
+        return error;
+    }
     return vm->stack_top[-1 - distance];
 }
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
+// Global variables for bytecode execution
+static RuntimeValue g_globals[256] = {0}; // Initialize all to zero
 
-#include "virtual_machine.h"
-#include "runtime.h"
+// Debug function to print a RuntimeValue
+static void print_runtime_value_type(const char* label, const RuntimeValue* value) {
+    if (!value) {
+        printf("VM DEBUG: %s: NULL\n", label);
+        return;
+    }
+    
+    const char* type_name = "UNKNOWN";
+    switch (value->type) {
+        case RUNTIME_VALUE_NULL: type_name = "NULL"; break;
+        case RUNTIME_VALUE_NUMBER: type_name = "NUMBER"; break;
+        case RUNTIME_VALUE_BOOLEAN: type_name = "BOOLEAN"; break;
+        case RUNTIME_VALUE_STRING: type_name = "STRING"; break;
+        case RUNTIME_VALUE_OBJECT: type_name = "OBJECT"; break;
+        case RUNTIME_VALUE_ARRAY: type_name = "ARRAY"; break;
+        case RUNTIME_VALUE_FUNCTION: type_name = "FUNCTION"; break;
+        default: break;
+    }
+    
+    printf("VM DEBUG: %s: type=%s (%d)", label, type_name, value->type);
+    
+    if (value->type == RUNTIME_VALUE_NUMBER) {
+        printf(", value=%f", value->number_value);
+    } else if (value->type == RUNTIME_VALUE_STRING) {
+        printf(", value=\"%s\"", value->string_value ? value->string_value : "null");
+    } else if (value->type == RUNTIME_VALUE_OBJECT) {
+        printf(", props=%d", value->object_value.count);
+    }
+    printf("\n");
+}
 
 /**
- * For now, let's store variables in a fixed global array.
- * The compiler assigns each variable an index (0..255).
+ * Helper function to compare two runtime values for equality.
+ * Returns true if the values are equal, false otherwise.
  */
-static RuntimeValue g_globals[256]; // You can adapt as needed
+static bool runtime_values_equal(const RuntimeValue* a, const RuntimeValue* b) {
+    if (a->type != b->type) {
+        return false;
+    }
+    
+    switch (a->type) {
+        case RUNTIME_VALUE_NULL:
+            return true;  // All nulls are equal
+            
+        case RUNTIME_VALUE_BOOLEAN:
+            return a->boolean_value == b->boolean_value;
+            
+        case RUNTIME_VALUE_NUMBER:
+            return a->number_value == b->number_value;
+            
+        case RUNTIME_VALUE_STRING:
+            if (a->string_value == NULL || b->string_value == NULL) {
+                return a->string_value == b->string_value;
+            }
+            return strcmp(a->string_value, b->string_value) == 0;
+            
+        case RUNTIME_VALUE_OBJECT:
+            // Objects are equal if they're the same object (reference equality)
+            // For deep equality, we'd need to compare all properties
+            return a->object_value.count == b->object_value.count &&
+                   a->object_value.keys == b->object_value.keys &&
+                   a->object_value.values == b->object_value.values;
+            
+        case RUNTIME_VALUE_ARRAY:
+            // Arrays are equal if they're the same array (reference equality)
+            return a->array_value.count == b->array_value.count &&
+                   a->array_value.elements == b->array_value.elements;
+                   
+        case RUNTIME_VALUE_FUNCTION:
+            // Functions are equal if they're the same function
+            return a->function_value.function_type == b->function_value.function_type &&
+                   a->function_value.builtin_function == b->function_value.builtin_function;
+                   
+        default:
+            return false;
+    }
+}
+
+/* Helper function to set a nested property on an object 
+ * Returns 1 on success, 0 on failure
+ */
+static int vm_set_property_at_path(RuntimeValue* obj, const char* prop, RuntimeValue value) {
+    if (!obj || !prop) {
+        fprintf(stderr, "VM Error: NULL object or property name in vm_set_property_at_path\n");
+        return 0;
+    }
+
+    if (obj->type != RUNTIME_VALUE_OBJECT) {
+        fprintf(stderr, "VM Error: Cannot set property '%s' on non-object value\n", prop);
+        return 0;
+    }
+
+    // Look for the property in the object
+    bool found = false;
+    
+    // Check if the property already exists
+    for (int i = 0; i < obj->object_value.count; i++) {
+        if (strcmp(obj->object_value.keys[i], prop) == 0) {
+            // Update existing property
+            printf("VM DEBUG: Updating existing property '%s'\n", prop);
+            runtime_free_value(&obj->object_value.values[i]);  // Free existing value
+            obj->object_value.values[i] = runtime_value_copy(&value);  // Set new value
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        // Property doesn't exist, add it
+        printf("VM DEBUG: Adding new property '%s'\n", prop);
+        int newCount = obj->object_value.count + 1;
+        
+        // Expand keys array
+        char** newKeys = realloc(
+            obj->object_value.keys,
+            newCount * sizeof(char*)
+        );
+        if (!newKeys) {
+            fprintf(stderr, "VM Error: Object property keys reallocation failed.\n");
+            return 0;
+        }
+        
+        // Expand values array
+        RuntimeValue* newValues = realloc(
+            obj->object_value.values,
+            newCount * sizeof(RuntimeValue)
+        );
+        if (!newValues) {
+            fprintf(stderr, "VM Error: Object property values reallocation failed.\n");
+            free(newKeys);
+            return 0;
+        }
+        
+        // Add the new property
+        newKeys[obj->object_value.count] = strdup(prop);
+        newValues[obj->object_value.count] = runtime_value_copy(&value);
+        
+        // Update the object
+        obj->object_value.keys = newKeys;
+        obj->object_value.values = newValues;
+        obj->object_value.count = newCount;
+        
+        printf("VM DEBUG: Added property '%s', object now has %d properties\n", 
+              prop, obj->object_value.count);
+    }
+    
+    return 1;
+}
+
+/* Helper function to get a property from an object 
+ * Returns the property value if found, or a NULL value if not found
+ */
+static RuntimeValue vm_get_property(RuntimeValue obj, const char* prop) {
+    RuntimeValue result = {.type = RUNTIME_VALUE_NULL};
+    
+    if (obj.type != RUNTIME_VALUE_OBJECT) {
+        return result;
+    }
+    
+    for (int i = 0; i < obj.object_value.count; i++) {
+        if (strcmp(obj.object_value.keys[i], prop) == 0) {
+            return runtime_value_copy(&obj.object_value.values[i]);
+        }
+    }
+    
+    return result;
+}
+
+/**
+ * Helper for update globals after a property change 
+ * Returns 1 on success, 0 on failure
+ */
+static bool update_globals_after_property_op(RuntimeValue* original, RuntimeValue* modified) {
+    for (int i = 0; i < 100; i++) {
+        if (g_globals[i].type == RUNTIME_VALUE_OBJECT) {
+            // Basic equality check (this is a simplification)
+            if (g_globals[i].object_value.count == original->object_value.count) {
+                printf("VM DEBUG: Updating global at index %d\n", i);
+                runtime_free_value(&g_globals[i]);
+                g_globals[i] = runtime_value_copy(modified);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Helper function to set a nested property on an object
+// property_path is a dot-separated path like "a.b.c"
+static bool vm_set_nested_property(RuntimeValue* obj, const char* property_path, RuntimeValue value) {
+    if (!obj || obj->type != RUNTIME_VALUE_OBJECT || !property_path) {
+        return false;
+    }
+    
+    printf("VM DEBUG: Setting nested property at path: '%s'\n", property_path);
+    
+    // Make a copy of the property path so we can tokenize it
+    char* path_copy = strdup(property_path);
+    if (!path_copy) {
+        fprintf(stderr, "VM Error: Failed to allocate memory for property path.\n");
+        return false;
+    }
+    
+    // Split the path into segments
+    char* segments[32] = {0}; // Support up to 32 levels deep
+    int segment_count = 0;
+    
+    // Parse the property path into segments
+    char* token = strtok(path_copy, ".");
+    while (token && segment_count < 32) {
+        segments[segment_count++] = strdup(token);
+        token = strtok(NULL, ".");
+    }
+    
+    if (segment_count == 0) {
+        fprintf(stderr, "VM Error: Empty property path.\n");
+        free(path_copy);
+        return false;
+    }
+    
+    printf("VM DEBUG: Property path has %d segments\n", segment_count);
+    
+    // Start with the provided object
+    RuntimeValue* current = obj;
+    
+    // Process all segments except the last one
+    for (int i = 0; i < segment_count - 1; i++) {
+        // Look for this property in the current object
+        bool found = false;
+        RuntimeValue* next = NULL;
+        
+        printf("VM DEBUG: Looking for property '%s' (segment %d)\n", segments[i], i);
+        
+        for (int j = 0; j < current->object_value.count; j++) {
+            if (strcmp(current->object_value.keys[j], segments[i]) == 0) {
+                // Found the property
+                printf("VM DEBUG: Found property '%s'\n", segments[i]);
+                
+                // Check if it's an object
+                if (current->object_value.values[j].type == RUNTIME_VALUE_OBJECT) {
+                    // It's an object, move to next level
+                    next = &current->object_value.values[j];
+                    found = true;
+                    break;
+                } else {
+                    // Property exists but isn't an object - replace it
+                    printf("VM DEBUG: Property '%s' exists but is not an object - replacing\n", segments[i]);
+                    
+                    // Free the current value
+                    runtime_free_value(&current->object_value.values[j]);
+                    
+                    // Create a new empty object
+                    current->object_value.values[j].type = RUNTIME_VALUE_OBJECT;
+                    current->object_value.values[j].object_value.count = 0;
+                    current->object_value.values[j].object_value.keys = NULL;
+                    current->object_value.values[j].object_value.values = NULL;
+                    
+                    next = &current->object_value.values[j];
+                    found = true;
+                    break;
+                }
+            }
+        }
+        
+        if (!found) {
+            // Property doesn't exist, create a new object property
+            printf("VM DEBUG: Property '%s' not found - creating new object\n", segments[i]);
+            
+            // Create new empty object
+            RuntimeValue new_obj;
+            new_obj.type = RUNTIME_VALUE_OBJECT;
+            new_obj.object_value.count = 0;
+            new_obj.object_value.keys = NULL;
+            new_obj.object_value.values = NULL;
+            
+            // Add to current object
+            vm_add_property(current, segments[i], &new_obj);
+            
+            // Get reference to the newly added property
+            int last_idx = current->object_value.count - 1;
+            next = &current->object_value.values[last_idx];
+            
+            // Free our temporary object (it's been copied by vm_add_property)
+            runtime_free_value(&new_obj);
+        }
+        
+        // Move to the next object in the path
+        current = next;
+    }
+    
+    // At this point, current points to the object that should contain the final property
+    const char* final_property = segments[segment_count - 1];
+    printf("VM DEBUG: Setting final property '%s'\n", final_property);
+    
+    // Set the final property to the provided value
+    vm_add_property(current, final_property, &value);
+    
+    // Clean up
+    for (int i = 0; i < segment_count; i++) {
+        free(segments[i]);
+    }
+    free(path_copy);
+    
+    return true;
+}
+
+// Helper function to update globals
+static void update_global_if_object(RuntimeValue *obj, int varIndex) {
+    // If the variable was loaded from globals, update it back
+    if (varIndex >= 0 && varIndex < 256 && obj->type == RUNTIME_VALUE_OBJECT) {
+        printf("VM DEBUG: Updating global variable at index %d with modified object\n", varIndex);
+        
+        // Free existing value
+        runtime_free_value(&g_globals[varIndex]);
+        
+        // Store the updated value
+        g_globals[varIndex] = runtime_value_copy(obj);
+        
+        print_runtime_value_type("Global variable after update", &g_globals[varIndex]);
+    }
+}
+
+// Find a variable index based on its value
+static int find_variable_index(RuntimeValue* value) {
+    if (!value || value->type != RUNTIME_VALUE_OBJECT) {
+        return -1;  // Not an object, so not tracking
+    }
+    
+    // Check globals array for matching object
+    for (int i = 0; i < 256; i++) {
+        if (g_globals[i].type == RUNTIME_VALUE_OBJECT) {
+            // Simple equality check - just check if object structure matches
+            if (g_globals[i].object_value.count == value->object_value.count) {
+                return i;  // Return the variable index
+            }
+        }
+    }
+    
+    return -1;  // Not found
+}
+
+// Clean up the vm_add_property function
+static void vm_add_property(RuntimeValue* obj, const char* propName, RuntimeValue* value) {
+    if (obj == NULL || obj->type != RUNTIME_VALUE_OBJECT || propName == NULL) {
+        fprintf(stderr, "VM Error: Cannot add property to non-object or with NULL property name.\n");
+        return;
+    }
+    
+    // Look for the property in the object
+    bool found = false;
+    
+    // Check if the property already exists
+    for (int i = 0; i < obj->object_value.count; i++) {
+        if (strcmp(obj->object_value.keys[i], propName) == 0) {
+            // Update existing property
+            runtime_free_value(&obj->object_value.values[i]);  // Free existing value
+            obj->object_value.values[i] = runtime_value_copy(value);  // Set new value
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        // Property doesn't exist, add it
+        int newCount = obj->object_value.count + 1;
+        
+        // Expand keys array
+        char** newKeys = realloc(
+            obj->object_value.keys,
+            newCount * sizeof(char*)
+        );
+        if (!newKeys) {
+            fprintf(stderr, "VM Error: Object property keys reallocation failed.\n");
+            return;
+        }
+        
+        // Expand values array
+        RuntimeValue* newValues = realloc(
+            obj->object_value.values,
+            newCount * sizeof(RuntimeValue)
+        );
+        if (!newValues) {
+            fprintf(stderr, "VM Error: Object property values reallocation failed.\n");
+            free(newKeys);
+            return;
+        }
+        
+        // Add the new property
+        newKeys[obj->object_value.count] = strdup(propName);
+        newValues[obj->object_value.count] = runtime_value_copy(value);
+        
+        // Update the object
+        obj->object_value.keys = newKeys;
+        obj->object_value.values = newValues;
+        obj->object_value.count = newCount;
+    }
+}
+
+// Add this function to print the entire stack at key points
+static void print_stack_trace(VM* vm, const char* label) {
+    printf("===== STACK TRACE (%s) - %ld items =====\n", label, (vm->stack_top - vm->stack));
+    
+    for (int i = 0; i < (vm->stack_top - vm->stack); i++) {
+        RuntimeValue* value = &vm->stack[i];
+        printf("  [%d] ", i);
+        
+        switch (value->type) {
+            case RUNTIME_VALUE_NULL:
+                printf("NULL\n");
+                break;
+            case RUNTIME_VALUE_NUMBER:
+                printf("NUMBER: %f\n", value->number_value);
+                break;
+            case RUNTIME_VALUE_BOOLEAN:
+                printf("BOOLEAN: %s\n", value->boolean_value ? "true" : "false");
+                break;
+            case RUNTIME_VALUE_STRING:
+                printf("STRING: '%s'\n", value->string_value);
+                break;
+            case RUNTIME_VALUE_OBJECT:
+                printf("OBJECT: props=%d (", value->object_value.count);
+                // Print a sample of property names
+                for (int j = 0; j < value->object_value.count && j < 3; j++) {
+                    if (j > 0) printf(", ");
+                    printf("'%s'", value->object_value.keys[j]);
+                }
+                if (value->object_value.count > 3) printf(", ...");
+                printf(")\n");
+                break;
+            case RUNTIME_VALUE_ARRAY:
+                printf("ARRAY: elements=%d\n", value->array_value.count);
+                break;
+            case RUNTIME_VALUE_FUNCTION:
+                printf("FUNCTION\n");
+                break;
+            default:
+                printf("UNKNOWN TYPE: %d\n", value->type);
+                break;
+        }
+    }
+    printf("========================================\n");
+}
 
 int vm_run(VM* vm) {
+    // Initialize global variables if not already done
+    for (int i = 0; i < 256; i++) {
+        g_globals[i].type = RUNTIME_VALUE_NULL;
+        g_globals[i].string_value = NULL;
+    }
+    
     for (;;) {
         // Fetch the next instruction
         uint8_t instruction = *vm->ip++;
-
+        
+        // Check if we're at the end of the bytecode
+        if (vm->ip - vm->chunk->code > vm->chunk->code_count) {
+            fprintf(stderr, "VM Error: Instruction pointer out of bounds.\n");
+            return 1;
+        }
+        
+        // Get instruction name
+        const char* instruction_name = "UNKNOWN";
+        switch (instruction) {
+            case OP_NOOP: instruction_name = "OP_NOOP"; break;
+            case OP_EOF: instruction_name = "OP_EOF"; break;
+            case OP_POP: instruction_name = "OP_POP"; break;
+            case OP_DUP: instruction_name = "OP_DUP"; break;
+            case OP_SWAP: instruction_name = "OP_SWAP"; break;
+            case OP_LOAD_CONST: instruction_name = "OP_LOAD_CONST"; break;
+            case OP_LOAD_VAR: instruction_name = "OP_LOAD_VAR"; break;
+            case OP_STORE_VAR: instruction_name = "OP_STORE_VAR"; break;
+            case OP_ADD: instruction_name = "OP_ADD"; break;
+            case OP_NEW_OBJECT: instruction_name = "OP_NEW_OBJECT"; break;
+            case OP_GET_PROPERTY: instruction_name = "OP_GET_PROPERTY"; break;
+            case OP_SET_PROPERTY: instruction_name = "OP_SET_PROPERTY"; break;
+            case OP_SET_NESTED_PROPERTY: instruction_name = "OP_SET_NESTED_PROPERTY"; break;
+            case OP_PRINT: instruction_name = "OP_PRINT"; break;
+            default: break;
+        }
+        
+        // Trace the instruction
+        printf("VM TRACE: Executing %s (%d) at offset %ld\n", 
+               instruction_name, instruction, (vm->ip - 1 - vm->chunk->code));
+               
         switch (instruction) {
 
             case OP_NOOP: {
@@ -174,23 +671,30 @@ int vm_run(VM* vm) {
             }
 
             case OP_POP: {
-                // Pop and discard top of stack
-                vm_pop(vm);
+                // Check if we have something to pop
+                if (vm->stack_top <= vm->stack) {
+                    printf("VM Warning: Attempted to pop from empty stack. Ignoring.\n");
+                } else {
+                    vm_pop(vm);
+                }
                 break;
             }
 
             case OP_DUP: {
-                // Duplicate the top stack value
-                RuntimeValue topVal = vm_pop(vm);
-                vm_push(vm, topVal);
-                vm_push(vm, topVal);
+                RuntimeValue val = vm_peek(vm, 0);
+                vm_push(vm, val);
                 break;
             }
 
             case OP_SWAP: {
-                // Swap top two stack items
+                // Swap top two values on the stack
+                if ((vm->stack_top - vm->stack) < 2) {
+                    fprintf(stderr, "VM Error: Stack underflow during OP_SWAP (need at least 2 values).\n");
+                    return 1;
+                }
                 RuntimeValue a = vm_pop(vm);
                 RuntimeValue b = vm_pop(vm);
+                // Push them back in reverse order
                 vm_push(vm, a);
                 vm_push(vm, b);
                 break;
@@ -210,18 +714,42 @@ int vm_run(VM* vm) {
             case OP_LOAD_VAR: {
                 // The next byte is the variable index
                 uint8_t varIndex = *vm->ip++;
-                vm_push(vm, g_globals[varIndex]);
+                
+                // Print debug information about the variable
+                char label[40];
+                snprintf(label, sizeof(label), "Loading variable at index %d", varIndex);
+                print_runtime_value_type(label, &g_globals[varIndex]);
+                
+                // Make a deep copy of the global variable
+                RuntimeValue value = runtime_value_copy(&g_globals[varIndex]);
+                
+                // Print the copied value for debug
+                print_runtime_value_type("Loaded value (copy)", &value);
+                
+                vm_push(vm, value);
                 break;
             }
 
             case OP_STORE_VAR: {
                 // The next byte is the variable index
                 uint8_t varIndex = *vm->ip++;
-                // Pop top of stack and store in global array
+                
+                // Pop top of stack
                 RuntimeValue value = vm_pop(vm);
-                g_globals[varIndex] = value;
-                // push it back for language’s assignment returning value
-                // vm_push(vm, value);
+                
+                // Debug the value before storing
+                char label[40];
+                snprintf(label, sizeof(label), "Storing to variable at index %d", varIndex);
+                print_runtime_value_type(label, &value);
+                
+                // Free any existing value in the global slot to prevent memory leaks
+                runtime_free_value(&g_globals[varIndex]);
+                
+                // Store a deep copy of the value in globals
+                g_globals[varIndex] = runtime_value_copy(&value);
+                
+                // Debug the copied value after storing
+                print_runtime_value_type("Value after storing (copy)", &g_globals[varIndex]);
                 break;
             }
 
@@ -405,7 +933,7 @@ int vm_run(VM* vm) {
                     val.boolean_value = !val.boolean_value;
                     vm_push(vm, val);
                 } else {
-                    // Non-boolean? Convert to boolean “truthiness” then invert
+                    // Non-boolean? Convert to boolean "truthiness" then invert
                     bool truthy = false;
                     if (val.type == RUNTIME_VALUE_NUMBER) {
                         truthy = (val.number_value != 0);
@@ -532,7 +1060,7 @@ int vm_run(VM* vm) {
 
             case OP_RETURN: {
                 // Typically we would pop a return value, handle call frames, etc.
-                // For now, let’s just return success from vm_run.
+                // For now, let's just return success from vm_run.
                 return 0;
             }
 
@@ -635,6 +1163,257 @@ int vm_run(VM* vm) {
             case OP_TO_STRING: {
                 // If we want to convert the top value to a string in place
                 // For now, just skip or handle as needed
+                break;
+            }
+
+            /* -----------------------------
+               Objects & Properties
+               ----------------------------- */
+            case OP_NEW_OBJECT: {
+                printf("VM DEBUG: Creating new object\n");
+                
+                // Create a new empty object
+                RuntimeValue obj;
+                obj.type = RUNTIME_VALUE_OBJECT;
+                obj.object_value.count = 0;
+                obj.object_value.keys = NULL;
+                obj.object_value.values = NULL;
+                
+                print_runtime_value_type("New object created", &obj);
+                vm_push(vm, obj);
+                break;
+            }
+
+            case OP_GET_PROPERTY: {
+                // Expect: top => property name, bottom => object
+                RuntimeValue propNameVal = vm_pop(vm);
+                RuntimeValue objVal = vm_pop(vm);
+                
+                printf("VM DEBUG: OP_GET_PROPERTY operation\n");
+                print_runtime_value_type("Object", &objVal);
+                print_runtime_value_type("Property name", &propNameVal);
+                
+                if (objVal.type != RUNTIME_VALUE_OBJECT) {
+                    fprintf(stderr, "VM Error: OP_GET_PROPERTY on non-object (type %d).\n", objVal.type);
+                    return 1;
+                }
+                if (propNameVal.type != RUNTIME_VALUE_STRING) {
+                    fprintf(stderr, "VM Error: OP_GET_PROPERTY requires string property name.\n");
+                    return 1;
+                }
+                
+                const char* propName = propNameVal.string_value;
+                bool found = false;
+                RuntimeValue result = {.type = RUNTIME_VALUE_NULL}; // Default to null if property not found
+                
+                // Debug the object
+                printf("VM DEBUG: Object has %d properties\n", objVal.object_value.count);
+                for (int i = 0; i < objVal.object_value.count; i++) {
+                    printf("VM DEBUG: Property %d: '%s'\n", i, objVal.object_value.keys[i]);
+                }
+                
+                // Look for the property in the object
+                for (int i = 0; i < objVal.object_value.count; i++) {
+                    if (strcmp(objVal.object_value.keys[i], propName) == 0) {
+                        printf("VM DEBUG: Found property '%s'\n", propName);
+                        result = runtime_value_copy(&objVal.object_value.values[i]);
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found) {
+                    fprintf(stderr, "VM Warning: Object has no property '%s'.\n", propName);
+                }
+                
+                print_runtime_value_type("Property value", &result);
+                vm_push(vm, result);
+                break;
+            }
+
+            case OP_SET_PROPERTY: {
+                // Print stack for debugging
+                print_stack_trace(vm, "BEFORE_SET_PROPERTY");
+                
+                // Ensure we have at least 3 values on the stack
+                if ((vm->stack_top - vm->stack) < 3) {
+                    fprintf(stderr, "VM Error: Stack underflow for OP_SET_PROPERTY (need at least 3 values).\n");
+                    return 1;
+                }
+                
+                // Get the items from the stack directly (not popping yet)
+                RuntimeValue value = *(vm->stack_top - 1);
+                RuntimeValue propName = *(vm->stack_top - 2);
+                RuntimeValue object = *(vm->stack_top - 3);
+                
+                // Print the types for debugging
+                printf("VM DEBUG: SET_PROPERTY stack order: [value=%d, propName=%d, object=%d]\n", 
+                       value.type, propName.type, object.type);
+                       
+                // Check if we have a mixed-up object/property order due to nested operations
+                if (propName.type == RUNTIME_VALUE_OBJECT && object.type == RUNTIME_VALUE_STRING) {
+                    fprintf(stderr, "VM DEBUG: Detected reversed object/propName order, swapping.\n");
+                    // Swap positions to fix the order
+                    RuntimeValue temp = propName;
+                    propName = object;
+                    object = temp;
+                }
+                
+                // Validate types after potential swap
+                if (propName.type != RUNTIME_VALUE_STRING) {
+                    fprintf(stderr, "VM Error: Property name must be a string, got type %d.\n", propName.type);
+                    return 1;
+                }
+                
+                if (object.type != RUNTIME_VALUE_OBJECT) {
+                    fprintf(stderr, "VM Error: Cannot add property to non-object (type %d).\n", object.type);
+                    return 1;
+                }
+                
+                // Now pop the values in the correct order
+                vm_pop(vm); // value 
+                vm_pop(vm); // propName (or swapped object)
+                vm_pop(vm); // object (or swapped propName)
+                
+                // Create a deep copy of the object to avoid reference issues
+                RuntimeValue objectCopy = runtime_value_copy(&object);
+                
+                // Set property on the object copy
+                vm_add_property(&objectCopy, propName.string_value, &value);
+                
+                // If this is a global variable, update it
+                for (int i = 0; i < 256; i++) {
+                    if (g_globals[i].type == RUNTIME_VALUE_OBJECT) {
+                        // Simple check to see if this might be our object
+                        if (g_globals[i].object_value.count == object.object_value.count) {
+                            runtime_free_value(&g_globals[i]);
+                            g_globals[i] = runtime_value_copy(&objectCopy);
+                            break;
+                        }
+                    }
+                }
+                
+                // Push the updated object back
+                vm_push(vm, objectCopy);
+                
+                // Free our local copy since vm_push makes its own copy
+                runtime_free_value(&objectCopy);
+                
+                print_stack_trace(vm, "AFTER_SET_PROPERTY");
+                break;
+            }
+
+            case OP_SET_NESTED_PROPERTY: {
+                // Ensure we have at least 3 values on the stack
+                if ((vm->stack_top - vm->stack) < 3) {
+                    fprintf(stderr, "VM Error: Stack underflow for OP_SET_NESTED_PROPERTY (need at least 3 values).\n");
+                    return 1;
+                }
+                
+                // Get the items from the stack directly (not popping yet)
+                RuntimeValue value = *(vm->stack_top - 1);
+                RuntimeValue pathVal = *(vm->stack_top - 2);
+                RuntimeValue objVal = *(vm->stack_top - 3);
+                
+                printf("VM DEBUG: OP_SET_NESTED_PROPERTY - Value type: %d, Path type: %d, Object type: %d\n", 
+                       value.type, pathVal.type, objVal.type);
+                
+                // Validate types
+                if (pathVal.type != RUNTIME_VALUE_STRING || pathVal.string_value == NULL) {
+                    fprintf(stderr, "VM Error: OP_SET_NESTED_PROPERTY requires valid string property path.\n");
+                    return 1;
+                }
+                
+                if (objVal.type != RUNTIME_VALUE_OBJECT) {
+                    fprintf(stderr, "VM Error: OP_SET_NESTED_PROPERTY requires object as target.\n");
+                    return 1;
+                }
+                
+                // Now pop the values
+                RuntimeValue val = vm_pop(vm);
+                RuntimeValue path = vm_pop(vm);
+                RuntimeValue obj = vm_pop(vm);
+                
+                const char* propPath = path.string_value;
+                printf("VM DEBUG: Setting nested property at path: '%s'\n", propPath);
+                
+                // Create a deep copy of the object to work with
+                RuntimeValue objCopy = runtime_value_copy(&obj);
+                
+                // Set the nested property using our helper function
+                bool success = vm_set_nested_property(&objCopy, propPath, val);
+                
+                if (!success) {
+                    fprintf(stderr, "VM Error: Failed to set nested property at path '%s'.\n", propPath);
+                    runtime_free_value(&objCopy);
+                    return 1;
+                }
+                
+                // If this is a global variable, update it too
+                for (int i = 0; i < 256; i++) {
+                    if (g_globals[i].type == RUNTIME_VALUE_OBJECT) {
+                        // Simple check to see if this might be our object
+                        if (g_globals[i].object_value.count == obj.object_value.count) {
+                            runtime_free_value(&g_globals[i]);
+                            g_globals[i] = runtime_value_copy(&objCopy);
+                            break;
+                        }
+                    }
+                }
+                
+                // Push the updated object back
+                vm_push(vm, objCopy);
+                
+                // Free the local copy
+                runtime_free_value(&objCopy);
+                break;
+            }
+
+            case OP_CALL_METHOD: {
+                // Byte 1: argCount (not including 'this')
+                uint8_t argCount = *vm->ip++;
+                
+                // Stack: [object, method, arg1, arg2, ..., argN]
+                
+                // Collect arguments (excluding 'this' and method)
+                RuntimeValue* args = malloc((argCount + 1) * sizeof(RuntimeValue));
+                if (!args) {
+                    fprintf(stderr, "VM Error: Memory allocation failed for method arguments.\n");
+                    return 1;
+                }
+                
+                // Pop arguments in reverse order
+                for (int i = argCount - 1; i >= 0; i--) {
+                    args[i + 1] = vm_pop(vm);
+                }
+                
+                // Pop the method
+                RuntimeValue methodVal = vm_pop(vm);
+                
+                // Pop the object ('this')
+                RuntimeValue thisObj = vm_pop(vm);
+                args[0] = thisObj; // 'this' is the first argument
+                
+                // Check if the method is a function
+                if (methodVal.type != RUNTIME_VALUE_FUNCTION) {
+                    fprintf(stderr, "VM Error: Cannot call non-function value as a method.\n");
+                    free(args);
+                    return 1;
+                }
+                
+                // Call the function with 'this' as the first argument
+                if (methodVal.function_value.function_type == FUNCTION_TYPE_BUILTIN) {
+                    // Built-in function
+                    RuntimeValue result = methodVal.function_value.builtin_function(NULL, args, argCount + 1);
+                    vm_push(vm, result);
+                } else {
+                    // User-defined function (not implemented yet)
+                    fprintf(stderr, "VM Warning: User-defined method calls not fully implemented.\n");
+                    RuntimeValue result = {.type = RUNTIME_VALUE_NULL};
+                    vm_push(vm, result);
+                }
+                
+                free(args);
                 break;
             }
 

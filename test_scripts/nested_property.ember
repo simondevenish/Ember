@@ -1,0 +1,19 @@
+// Testing nested property assignment
+var game = {
+    settings: {
+        difficulty: "Normal",
+        sound: true
+    }
+};
+
+// Test initial values
+print("Initial difficulty: " + game.settings.difficulty);
+print("Initial sound: " + game.settings.sound);
+
+// Update nested properties
+game.settings.difficulty = "Hard";
+game.settings.sound = false;
+
+// Verify updates
+print("New difficulty: " + game.settings.difficulty);
+print("New sound: " + game.settings.sound); 

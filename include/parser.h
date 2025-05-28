@@ -52,7 +52,7 @@ typedef struct ASTNode {
         struct { struct ASTNode** elements; int element_count; } array_literal; // For AST_ARRAY_LITERAL
         struct { struct ASTNode* array_expr; struct ASTNode* index_expr; } index_access; // For AST_INDEX_ACCESS
         struct { char* import_path; } import_stmt; // For AST_IMPORT
-        struct { char** keys; struct ASTNode** values; int property_count; } object_literal; // For AST_OBJECT_LITERAL
+        struct { char** keys; struct ASTNode** values; int property_count; char** mixins; int mixin_count; } object_literal; // For AST_OBJECT_LITERAL
         struct { struct ASTNode* object; char* property; } property_access; // For AST_PROPERTY_ACCESS
         struct { struct ASTNode* object; char* method; struct ASTNode** arguments; int argument_count; } method_call; // For AST_METHOD_CALL
         struct { struct ASTNode* object; char* property; struct ASTNode* value; } property_assignment; // For AST_PROPERTY_ASSIGNMENT
@@ -284,5 +284,13 @@ ASTNode* parse_property_or_method(Parser* parser, ASTNode* object);
  * @return ASTNode* The parsed property assignment node.
  */
 ASTNode* parse_property_assignment(Parser* parser, ASTNode* property_access);
+
+/**
+ * @brief Parse a function expression.
+ * 
+ * @param parser The parser instance.
+ * @return ASTNode* The parsed function expression node.
+ */
+ASTNode* parse_function_expression(Parser* parser);
 
 #endif // PARSER_H

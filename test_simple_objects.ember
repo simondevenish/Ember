@@ -1,0 +1,21 @@
+// Simple object test without function expressions
+print("=== Testing Basic Objects ===");
+
+// Test 1: Simple object creation
+var person = {
+    name: "Alice",
+    age: 30
+};
+
+print("Person name: " + person.name);
+print("Person age: " + person.age);
+
+// Test 2: Object property modification
+person.age = 31;
+print("Updated age: " + person.age);
+
+// Test 3: Adding new properties
+person.city = "New York";
+print("City: " + person.city);
+
+print("=== Basic object test completed ==="); 

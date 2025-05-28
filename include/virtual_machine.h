@@ -65,6 +65,7 @@ typedef enum {
     OP_SET_PROPERTY,     // object.prop = value
     OP_SET_NESTED_PROPERTY, // object.prop1.prop2... = value (for nested properties)
     OP_GET_PROPERTY,     // push object.prop
+    OP_COPY_PROPERTIES,  // Copy all properties from source object to target object
 
     // Type conversions, printing, etc. (examples)
     OP_PRINT,            // Debug print top of stack

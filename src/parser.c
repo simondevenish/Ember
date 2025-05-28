@@ -196,6 +196,11 @@ void free_ast(ASTNode* node) {
                 free_ast(node->object_literal.values[i]);
             }
             free(node->object_literal.values);
+            // Free mixins
+            for (int i = 0; i < node->object_literal.mixin_count; i++) {
+                free(node->object_literal.mixins[i]);
+            }
+            free(node->object_literal.mixins);
             break;
         case AST_PROPERTY_ACCESS:
             free(node->property_access.property);
@@ -332,6 +337,11 @@ ASTNode* parse_factor(Parser* parser) {
     else if (parser->current_token.type == TOKEN_PUNCTUATION &&
              strcmp(parser->current_token.value, "{") == 0) {
         factor_node = parse_object_literal(parser);
+    }
+    // Handle function expressions: fn(params) { ... }
+    else if (parser->current_token.type == TOKEN_KEYWORD &&
+             strcmp(parser->current_token.value, "fn") == 0) {
+        factor_node = parse_function_expression(parser);
     }
     // Handle parentheses for sub-expressions
     else if (parser->current_token.type == TOKEN_PUNCTUATION &&
@@ -991,7 +1001,7 @@ ASTNode* parse_function_definition(Parser* parser) {
         return NULL;
     }
 
-    // Parse the function body
+    // Parse the function body (block)
     ASTNode* body = parse_block(parser);
     if (!body) {
         report_error(parser, "Failed to parse function body");
@@ -1003,7 +1013,7 @@ ASTNode* parse_function_definition(Parser* parser) {
         return NULL;
     }
 
-    // Create the function definition AST node (same as original)
+    // Create the function definition node (same as original)
     ASTNode* function_def_node = create_ast_node(AST_FUNCTION_DEF);
     if (!function_def_node) {
         report_error(parser, "Memory allocation failed for function definition node");
@@ -1895,6 +1905,8 @@ ASTNode* parse_object_literal(Parser* parser) {
     char** keys = NULL;
     ASTNode** values = NULL;
     int property_count = 0;
+    char** mixins = NULL;
+    int mixin_count = 0;
 
     // Handle the empty object case
     if (parser->current_token.type == TOKEN_PUNCTUATION && 
@@ -1913,6 +1925,109 @@ ASTNode* parse_object_literal(Parser* parser) {
         object_node->object_literal.property_count = 0;
         
         return object_node;
+    }
+
+    // Check for mixin syntax: :[MixinName1, MixinName2]
+    if (parser->current_token.type == TOKEN_PUNCTUATION && 
+        strcmp(parser->current_token.value, ":") == 0) {
+        
+        // Look ahead to see if this is a mixin declaration
+        Token next_token = peek_token(parser);
+        if (next_token.type == TOKEN_PUNCTUATION && 
+            strcmp(next_token.value, "[") == 0) {
+            
+            // This is a mixin declaration
+            parser_advance(parser); // Skip ':'
+            parser_advance(parser); // Skip '['
+            
+            // Parse mixin names
+            do {
+                if (parser->current_token.type != TOKEN_IDENTIFIER) {
+                    report_error(parser, "Expected mixin name (identifier)");
+                    // Clean up
+                    for (int i = 0; i < mixin_count; i++) {
+                        free(mixins[i]);
+                    }
+                    free(mixins);
+                    return NULL;
+                }
+                
+                // Store the mixin name
+                char* mixin_name = strdup(parser->current_token.value);
+                if (!mixin_name) {
+                    report_error(parser, "Memory allocation failed for mixin name");
+                    // Clean up
+                    for (int i = 0; i < mixin_count; i++) {
+                        free(mixins[i]);
+                    }
+                    free(mixins);
+                    return NULL;
+                }
+                parser_advance(parser);
+                
+                // Expand the mixins array
+                char** new_mixins = realloc(mixins, sizeof(char*) * (mixin_count + 1));
+                if (!new_mixins) {
+                    report_error(parser, "Memory allocation failed for mixins");
+                    free(mixin_name);
+                    for (int i = 0; i < mixin_count; i++) {
+                        free(mixins[i]);
+                    }
+                    free(mixins);
+                    return NULL;
+                }
+                mixins = new_mixins;
+                mixins[mixin_count] = mixin_name;
+                mixin_count++;
+                
+                // Look for ',' or ']'
+                if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                    strcmp(parser->current_token.value, ",") == 0) {
+                    parser_advance(parser); // Skip ','
+                } else if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                           strcmp(parser->current_token.value, "]") == 0) {
+                    parser_advance(parser); // Skip ']'
+                    break;
+                } else {
+                    report_error(parser, "Expected ',' or ']' in mixin list");
+                    // Clean up
+                    for (int i = 0; i < mixin_count; i++) {
+                        free(mixins[i]);
+                    }
+                    free(mixins);
+                    return NULL;
+                }
+            } while (1);
+            
+            // After parsing mixins, check if there are more properties
+            if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                strcmp(parser->current_token.value, "}") == 0) {
+                // No more properties, just mixins
+                parser_advance(parser); // Skip '}'
+                
+                // Create object literal node with just mixins
+                ASTNode* object_node = create_ast_node(AST_OBJECT_LITERAL);
+                if (!object_node) {
+                    report_error(parser, "Memory allocation failed for object literal node");
+                    // Clean up
+                    for (int i = 0; i < mixin_count; i++) {
+                        free(mixins[i]);
+                    }
+                    free(mixins);
+                    return NULL;
+                }
+                
+                object_node->object_literal.keys = NULL;
+                object_node->object_literal.values = NULL;
+                object_node->object_literal.property_count = 0;
+                object_node->object_literal.mixins = mixins;
+                object_node->object_literal.mixin_count = mixin_count;
+                
+                return object_node;
+            }
+            
+            // There are more properties after mixins, continue parsing
+        }
     }
 
     // Parse properties
@@ -2070,6 +2185,8 @@ ASTNode* parse_object_literal(Parser* parser) {
     object_node->object_literal.keys = keys;
     object_node->object_literal.values = values;
     object_node->object_literal.property_count = property_count;
+    object_node->object_literal.mixins = mixins;
+    object_node->object_literal.mixin_count = mixin_count;
 
     return object_node;
 }
@@ -2246,4 +2363,124 @@ ASTNode* parse_property_assignment(Parser* parser, ASTNode* property_access) {
     free(property_access); // Only free the struct itself, not its contents
     
     return property_assignment;
+}
+
+ASTNode* parse_function_expression(Parser* parser) {
+    // Parse function expressions: fn(params) { ... }
+    // This is similar to parse_function_definition but without a name
+    
+    // Expect 'fn' keyword (already checked in parse_factor)
+    if (!match_token(parser, TOKEN_KEYWORD, "fn")) {
+        report_error(parser, "Expected 'fn' keyword");
+        return NULL;
+    }
+
+    // Expect an opening parenthesis '('
+    if (!match_token(parser, TOKEN_PUNCTUATION, "(")) {
+        report_error(parser, "Expected '(' after 'fn'");
+        return NULL;
+    }
+
+    // Parse parameters (same logic as function definition)
+    char** parameters = NULL;
+    int parameter_count = 0;
+
+    // While the next token is not ')', parse parameters
+    while (parser->current_token.type != TOKEN_PUNCTUATION ||
+           strcmp(parser->current_token.value, ")") != 0) {
+
+        if (parser->current_token.type != TOKEN_IDENTIFIER) {
+            report_error(parser, "Expected parameter name");
+            for (int i = 0; i < parameter_count; i++) {
+                free(parameters[i]);
+            }
+            free(parameters);
+            return NULL;
+        }
+
+        // Capture parameter name
+        char* param_name = strdup(parser->current_token.value);
+        if (!param_name) {
+            report_error(parser, "Memory allocation failed for parameter name");
+            for (int i = 0; i < parameter_count; i++) {
+                free(parameters[i]);
+            }
+            free(parameters);
+            return NULL;
+        }
+
+        // Add parameter name to the list
+        char** temp = realloc(parameters, sizeof(char*) * (parameter_count + 1));
+        if (!temp) {
+            report_error(parser, "Memory allocation failed for parameters");
+            free(param_name);
+            for (int i = 0; i < parameter_count; i++) {
+                free(parameters[i]);
+            }
+            free(parameters);
+            return NULL;
+        }
+        parameters = temp;
+        parameters[parameter_count++] = param_name;
+
+        parser_advance(parser);
+
+        // If next token is ',', skip it and continue parsing parameters
+        if (parser->current_token.type == TOKEN_PUNCTUATION &&
+            strcmp(parser->current_token.value, ",") == 0) {
+            parser_advance(parser);
+        } else if (parser->current_token.type == TOKEN_PUNCTUATION &&
+                   strcmp(parser->current_token.value, ")") == 0) {
+            // End of parameter list
+            break;
+        } else {
+            report_error(parser, "Expected ',' or ')' in parameter list");
+            for (int i = 0; i < parameter_count; i++) {
+                free(parameters[i]);
+            }
+            free(parameters);
+            return NULL;
+        }
+    }
+
+    // Consume the closing parenthesis ')'
+    if (!match_token(parser, TOKEN_PUNCTUATION, ")")) {
+        report_error(parser, "Expected ')' after parameter list");
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+
+    // Parse the function body (block)
+    ASTNode* body = parse_block(parser);
+    if (!body) {
+        report_error(parser, "Failed to parse function body");
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+
+    // Create the function definition node (we'll use the same AST node type)
+    ASTNode* function_node = create_ast_node(AST_FUNCTION_DEF);
+    if (!function_node) {
+        report_error(parser, "Memory allocation failed for function expression node");
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        free_ast(body);
+        return NULL;
+    }
+
+    // For function expressions, we use a generated name or NULL
+    function_node->function_def.function_name = strdup("<anonymous>");
+    function_node->function_def.parameters = parameters;
+    function_node->function_def.parameter_count = parameter_count;
+    function_node->function_def.body = body;
+
+    return function_node;
 }

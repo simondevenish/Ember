@@ -41,6 +41,12 @@ Environment* runtime_create_environment() {
 
 // Function to create a deep copy of a RuntimeValue
 RuntimeValue runtime_value_copy(const RuntimeValue* value) {
+    if (!value) {
+        fprintf(stderr, "VM Error: runtime_value_copy called with NULL value\n");
+        RuntimeValue null_result = {.type = RUNTIME_VALUE_NULL};
+        return null_result;
+    }
+    
     RuntimeValue copy = *value; // Shallow copy of the struct
 
     switch (value->type) {
@@ -61,6 +67,17 @@ RuntimeValue runtime_value_copy(const RuntimeValue* value) {
             break;
         case RUNTIME_VALUE_OBJECT:
             if (value->object_value.keys && value->object_value.values && value->object_value.count > 0) {
+                // Validate the object structure first
+                for (int i = 0; i < value->object_value.count; i++) {
+                    if (!value->object_value.keys[i]) {
+                        fprintf(stderr, "VM Error: Object key[%d] is NULL\n", i);
+                        copy.object_value.count = 0;
+                        copy.object_value.keys = NULL;
+                        copy.object_value.values = NULL;
+                        return copy;
+                    }
+                }
+                
                 // Allocate memory for keys and values
                 copy.object_value.keys = malloc(sizeof(char*) * value->object_value.count);
                 copy.object_value.values = malloc(sizeof(RuntimeValue) * value->object_value.count);
@@ -73,6 +90,7 @@ RuntimeValue runtime_value_copy(const RuntimeValue* value) {
                     }
                 } else {
                     // Handle allocation failure
+                    fprintf(stderr, "VM Error: Failed to allocate memory for object copy\n");
                     if (copy.object_value.keys) {
                         free(copy.object_value.keys);
                         copy.object_value.keys = NULL;

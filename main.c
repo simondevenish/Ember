@@ -15,7 +15,7 @@
 static void print_usage(void);
 
 /**
- * @brief Helper function to read a file’s entire contents into a buffer (binary-safe).
+ * @brief Helper function to read a file's entire contents into a buffer (binary-safe).
  * 
  * @param filename The path to the file.
  * @return char*   Heap-allocated null-terminated string, or NULL on error.
@@ -177,6 +177,31 @@ static BytecodeChunk* read_chunk(const char* filename) {
                 chunk->constants[i].string_value = sdata;
             } break;
 
+            case RUNTIME_VALUE_FUNCTION: {
+                // For function constants, we only need to store the function type
+                // and basic metadata. The actual function body is compiled separately.
+                int func_type = (int)chunk->constants[i].function_value.function_type;
+                fwrite(&func_type, sizeof(int), 1, file);
+                
+                if (chunk->constants[i].function_value.function_type == FUNCTION_TYPE_USER) {
+                    // For user-defined functions, store the name and parameter count
+                    UserDefinedFunction* user_func = chunk->constants[i].function_value.user_function;
+                    if (user_func && user_func->name) {
+                        int name_len = (int)strlen(user_func->name);
+                        fwrite(&name_len, sizeof(int), 1, file);
+                        fwrite(user_func->name, 1, name_len, file);
+                        fwrite(&user_func->parameter_count, sizeof(int), 1, file);
+                    } else {
+                        // No name or invalid function
+                        int name_len = 0;
+                        int param_count = 0;
+                        fwrite(&name_len, sizeof(int), 1, file);
+                        fwrite(&param_count, sizeof(int), 1, file);
+                    }
+                }
+                // For built-in functions, we don't need to store additional data
+            } break;
+
             default:
                 fprintf(stderr, "Error: Unsupported constant type %d in chunk.\n", (int)t);
                 vm_free_chunk(chunk);
@@ -231,6 +256,31 @@ static int write_chunk(const char* filename, const BytecodeChunk* chunk) {
                 int slen = (int)strlen(s);
                 fwrite(&slen, sizeof(int), 1, file);
                 fwrite(s, 1, slen, file);
+            } break;
+
+            case RUNTIME_VALUE_FUNCTION: {
+                // For function constants, we only need to store the function type
+                // and basic metadata. The actual function body is compiled separately.
+                int func_type = (int)chunk->constants[i].function_value.function_type;
+                fwrite(&func_type, sizeof(int), 1, file);
+                
+                if (chunk->constants[i].function_value.function_type == FUNCTION_TYPE_USER) {
+                    // For user-defined functions, store the name and parameter count
+                    UserDefinedFunction* user_func = chunk->constants[i].function_value.user_function;
+                    if (user_func && user_func->name) {
+                        int name_len = (int)strlen(user_func->name);
+                        fwrite(&name_len, sizeof(int), 1, file);
+                        fwrite(user_func->name, 1, name_len, file);
+                        fwrite(&user_func->parameter_count, sizeof(int), 1, file);
+                    } else {
+                        // No name or invalid function
+                        int name_len = 0;
+                        int param_count = 0;
+                        fwrite(&name_len, sizeof(int), 1, file);
+                        fwrite(&param_count, sizeof(int), 1, file);
+                    }
+                }
+                // For built-in functions, we don't need to store additional data
             } break;
 
             default:
@@ -373,6 +423,44 @@ static int embed_chunk_in_exe(const char* outFile, const BytecodeChunk* chunk) {
                 fprintf(stub, "    s_%d[%d] = '\\0';\n", i, slen);
                 fprintf(stub, "    chunk.constants[%d].string_value = s_%d;\n", i, i);
                 fprintf(stub, "  }\n");
+            } break;
+            case RUNTIME_VALUE_FUNCTION: {
+                // For function constants, we only need to store the function type
+                // and basic metadata. The actual function body is compiled separately.
+                int func_type = (int)val.function_value.function_type;
+                fprintf(stub, "  chunk.constants[%d].function_value.function_type = %d;\n",
+                        i, func_type);
+                
+                if (val.function_value.function_type == FUNCTION_TYPE_USER) {
+                    // For user-defined functions, store the name and parameter count
+                    UserDefinedFunction* user_func = val.function_value.user_function;
+                    if (user_func && user_func->name) {
+                        int name_len = (int)strlen(user_func->name);
+                        fprintf(stub, "  {\n");
+                        fprintf(stub, "    static char s_%d[%d + 1] = {", i, name_len);
+                        for (int c = 0; c < name_len; c++) {
+                            fprintf(stub, "%d", (unsigned char)user_func->name[c]);
+                            if (c < name_len - 1) {
+                                fprintf(stub, ",");
+                            }
+                        }
+                        fprintf(stub, "};\n");
+                        fprintf(stub, "    s_%d[%d] = '\\0';\n", i, name_len);
+                        fprintf(stub, "    chunk.constants[%d].function_value.user_function = &s_%d;\n",
+                                i, i);
+                        fprintf(stub, "    chunk.constants[%d].function_value.parameter_count = %d;\n",
+                                i, user_func->parameter_count);
+                        fprintf(stub, "  }\n");
+                    } else {
+                        // No name or invalid function
+                        int name_len = 0;
+                        int param_count = 0;
+                        fprintf(stub, "  chunk.constants[%d].function_value.user_function = NULL;\n", i);
+                        fprintf(stub, "  chunk.constants[%d].function_value.parameter_count = %d;\n",
+                                i, param_count);
+                    }
+                }
+                // For built-in functions, we don't need to store additional data
             } break;
             default:
                 fprintf(stub, "  // Unknown constant type\n");

@@ -267,7 +267,26 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             // Create a new object
             emit_byte(chunk, OP_NEW_OBJECT);
 
-            // Add each property to the object
+            // First, handle mixins if any
+            if (node->object_literal.mixin_count > 0) {
+                for (int i = 0; i < node->object_literal.mixin_count; i++) {
+                    // Duplicate the object reference on the stack
+                    emit_byte(chunk, OP_DUP);
+                    
+                    // Load the mixin object by name (it should be a variable)
+                    int mixinIndex = symbol_table_get_or_add(symtab, node->object_literal.mixins[i], false);
+                    emit_byte(chunk, OP_LOAD_VAR);
+                    // Emit 16-bit variable index (big-endian)
+                    emit_byte(chunk, (uint8_t)((mixinIndex >> 8) & 0xFF));
+                    emit_byte(chunk, (uint8_t)(mixinIndex & 0xFF));
+                    
+                    // Copy all properties from mixin to the new object
+                    // This will be handled by a new VM operation: OP_COPY_PROPERTIES
+                    emit_byte(chunk, OP_COPY_PROPERTIES);
+                }
+            }
+
+            // Then, add each regular property to the object
             for (int i = 0; i < node->object_literal.property_count; i++) {
                 // Duplicate the object reference on the stack
                 emit_byte(chunk, OP_DUP);
@@ -303,95 +322,74 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             break;
         }
         case AST_METHOD_CALL: {
-            // Compile the object expression
+            // obj.method(args) => compile obj, args, then OP_METHOD_CALL
             compile_expression(node->method_call.object, chunk, symtab);
             
-            // Duplicate the object reference for the 'this' context
-            emit_byte(chunk, OP_DUP);
+            // Compile arguments in reverse order
+            for (int i = node->method_call.argument_count - 1; i >= 0; i--) {
+                compile_expression(node->method_call.arguments[i], chunk, symtab);
+            }
             
-            // Push the method name (as string constant)
+            // Push method name as string constant
             RuntimeValue method_val;
             method_val.type = RUNTIME_VALUE_STRING;
             method_val.string_value = strdup(node->method_call.method);
             emit_constant(chunk, method_val);
             
-            // Get method from object
-            emit_byte(chunk, OP_GET_PROPERTY);
-            
-            // Push arguments (left->right)
-            for (int i = 0; i < node->method_call.argument_count; i++) {
-                compile_expression(node->method_call.arguments[i], chunk, symtab);
-            }
-            
-            // Call method with object as 'this' context
-            // Stack: [object, method, arg1, arg2, ..., argN]
+            // Call method
             emit_byte(chunk, OP_CALL_METHOD);
             emit_byte(chunk, (uint8_t)node->method_call.argument_count);
             break;
         }
         case AST_PROPERTY_ASSIGNMENT: {
-            printf("DEBUG: Compiling AST_PROPERTY_ASSIGNMENT\n");
+            // obj.prop = value
+            // Compile: obj, "prop", value, OP_SET_PROPERTY
+            // 1. Compile the object expression
+            compile_expression(node->property_assignment.object, chunk, symtab);
             
-            // Check if this is a nested property access (obj.x.y = value)
-            if (node->property_assignment.object->type == AST_PROPERTY_ACCESS) {
-                printf("DEBUG: Detected nested property access in compiler\n");
-                
-                // Extract the complete property path for the nested assignment
-                char path_buffer[256] = {0}; // Buffer to build the full path
-                ASTNode* current = node->property_assignment.object;
-                const char* innerProp = node->property_assignment.property; // The final property in the chain
-                
-                // Build the property path from right to left
-                strcpy(path_buffer, innerProp);
-                
-                // Traverse the property access chain to build the full path
-                while (current->type == AST_PROPERTY_ACCESS) {
-                    // Need to prepend the current property with a dot
-                    char temp[256];
-                    snprintf(temp, sizeof(temp), "%s.%s", current->property_access.property, path_buffer);
-                    strcpy(path_buffer, temp);
-                    
-                    // Move to the next object in the chain
-                    current = current->property_access.object;
-                }
-                
-                // At this point, current should be the base object and path_buffer contains the full path
-                // e.g., "x.y.z" for obj.x.y.z = value
-                printf("DEBUG: Built nested property path: %s\n", path_buffer);
-                
-                // 1. Get the base object (obj)
-                compile_expression(current, chunk, symtab);
-                
-                // 2. Push the full property path as a string
-                RuntimeValue path_val;
-                path_val.type = RUNTIME_VALUE_STRING;
-                path_val.string_value = strdup(path_buffer);
-                emit_constant(chunk, path_val);
-                
-                // 3. Compile the value to assign
-                compile_expression(node->property_assignment.value, chunk, symtab);
-                
-                // 4. Use the dedicated nested property setter instruction
-                emit_byte(chunk, OP_SET_NESTED_PROPERTY);
+            // 2. Push the property name (as string constant)
+            RuntimeValue prop_val;
+            prop_val.type = RUNTIME_VALUE_STRING;
+            prop_val.string_value = strdup(node->property_assignment.property);
+            emit_constant(chunk, prop_val);
+            
+            // 3. Compile the value to assign
+            compile_expression(node->property_assignment.value, chunk, symtab);
+            
+            // 4. Use regular property setter for direct assignments
+            emit_byte(chunk, OP_SET_PROPERTY);
+            break;
+        }
+        case AST_FUNCTION_DEF: {
+            // Function definition in expression context (e.g., in object literal)
+            // Create a function object and push it onto the stack
+            
+            // For now, we'll create a simple function value
+            // In a more complete implementation, we'd need to handle closures
+            RuntimeValue func_val;
+            func_val.type = RUNTIME_VALUE_FUNCTION;
+            func_val.function_value.function_type = FUNCTION_TYPE_USER;
+            
+            // Create a user-defined function structure
+            UserDefinedFunction* user_func = malloc(sizeof(UserDefinedFunction));
+            if (!user_func) {
+                fprintf(stderr, "Compiler error: Memory allocation failed for function\n");
+                return;
             }
-            else {
-                // Regular property assignment (obj.prop = value)
-                
-                // 1. Compile the object expression
-                compile_expression(node->property_assignment.object, chunk, symtab);
-                
-                // 2. Push the property name (as string constant)
-                RuntimeValue prop_val;
-                prop_val.type = RUNTIME_VALUE_STRING;
-                prop_val.string_value = strdup(node->property_assignment.property);
-                emit_constant(chunk, prop_val);
-                
-                // 3. Compile the value to assign
-                compile_expression(node->property_assignment.value, chunk, symtab);
-                
-                // 4. Use regular property setter for direct assignments
-                emit_byte(chunk, OP_SET_PROPERTY);
+            
+            user_func->name = strdup(node->function_def.function_name);
+            user_func->parameter_count = node->function_def.parameter_count;
+            user_func->parameters = malloc(sizeof(char*) * user_func->parameter_count);
+            
+            for (int i = 0; i < user_func->parameter_count; i++) {
+                user_func->parameters[i] = strdup(node->function_def.parameters[i]);
             }
+            
+            user_func->body = node->function_def.body; // Share the AST node
+            
+            func_val.function_value.user_function = user_func;
+            
+            emit_constant(chunk, func_val);
             break;
         }
         default:

@@ -8,6 +8,13 @@ build/
 *.bin
 *.elf
 
+# EmberScript compiled bytecode files
+*.embc
+
+# Test files in root (should be in test_scripts/ or tests/)
+/test_*.ember
+/test_*.embc
+
 # Temporary files
 *.tmp
 *.log

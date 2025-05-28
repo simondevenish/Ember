@@ -1,0 +1,64 @@
+// EmberScript Colon-Based Variable Declaration Syntax Demo
+// This demonstrates the new syntax implemented for variable declarations
+
+print("=== EmberScript Colon Syntax Demo ===");
+
+// 1. Traditional syntax (still supported)
+print("\n--- Traditional Syntax ---");
+var traditional = "Old style declaration";
+print("traditional: " + traditional);
+
+// 2. New colon syntax for var (mutable)
+print("\n--- New Colon Syntax (var) ---");
+var mutableValue: "New style declaration";
+print("mutableValue: " + mutableValue);
+
+// Mutable variables can be reassigned
+mutableValue = "Changed value";
+print("mutableValue after assignment: " + mutableValue);
+
+// 3. Let syntax for immutable variables
+print("\n--- Let Syntax (immutable) ---");
+let immutableValue: "This cannot be changed";
+print("immutableValue: " + immutableValue);
+
+// 4. Implicit variable declarations (defaults to var)
+print("\n--- Implicit Declarations ---");
+implicitVar: "No keyword needed";
+print("implicitVar: " + implicitVar);
+
+// Implicit variables are mutable by default
+implicitVar = "Can be changed";
+print("implicitVar after assignment: " + implicitVar);
+
+// 5. Complex expressions in declarations
+print("\n--- Complex Expressions ---");
+var calculation: 10 + 20 * 3;
+let greeting: "Hello, " + "EmberScript!";
+dataArray: [1, 2, 3, 4, 5];
+
+print("calculation: " + calculation);
+print("greeting: " + greeting);
+print("dataArray[2]: " + dataArray[2]);
+
+// 6. Objects with colon syntax
+print("\n--- Objects ---");
+var config: {
+    appName: "EmberScript Demo",
+    version: "1.0",
+    debug: true
+};
+
+print("config.appName: " + config.appName);
+print("config.version: " + config.version);
+
+// 7. Function definitions (still use colon syntax)
+print("\n--- Functions ---");
+multiply: fn(a, b) {
+    print("Multiplying " + a + " by " + b);
+}
+
+print("Function 'multiply' defined successfully!");
+
+print("\n=== Demo Complete! ===");
+print("The colon syntax provides a cleaner, more consistent way to declare variables!"); 

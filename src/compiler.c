@@ -59,8 +59,45 @@ int symbol_table_get_or_add(SymbolTable* table, const char* name, bool isFunctio
     table->symbols[index].name = strdup(name);
     table->symbols[index].index = index;      // For simplicity
     table->symbols[index].isFunction = isFunction;
+    table->symbols[index].is_mutable = true;  // Default to mutable for backward compatibility
     table->count++;
     return index;
+}
+
+int symbol_table_get_or_add_variable(SymbolTable* table, const char* name, bool is_mutable) {
+    // See if the symbol already exists
+    for (int i = 0; i < table->count; i++) {
+        if (strcmp(table->symbols[i].name, name) == 0) {
+            if (table->symbols[i].isFunction) {
+                fprintf(stderr, "Error: '%s' is already defined as a function\n", name);
+                return -1;
+            }
+            // Variable already exists - this could be an error in strict mode
+            fprintf(stderr, "Error: Variable '%s' is already declared\n", name);
+            return -1;
+        }
+    }
+    // Otherwise, create a new variable symbol
+    ensure_symtab_capacity(table);
+    int index = table->count;
+    table->symbols[index].name = strdup(name);
+    table->symbols[index].index = index;
+    table->symbols[index].isFunction = false;
+    table->symbols[index].is_mutable = is_mutable;
+    table->count++;
+    return index;
+}
+
+bool symbol_table_is_variable_mutable(SymbolTable* table, const char* name) {
+    for (int i = 0; i < table->count; i++) {
+        if (strcmp(table->symbols[i].name, name) == 0) {
+            if (table->symbols[i].isFunction) {
+                return false; // Functions are not mutable variables
+            }
+            return table->symbols[i].is_mutable;
+        }
+    }
+    return false; // Variable not found
 }
 
 /* -------------------------------------------------------
@@ -141,6 +178,13 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             break;
         }
         case AST_ASSIGNMENT: {
+            // Check if the variable is mutable before allowing assignment
+            if (!symbol_table_is_variable_mutable(symtab, node->assignment.variable)) {
+                fprintf(stderr, "Compile Error: Cannot assign to immutable variable '%s'\n", 
+                        node->assignment.variable);
+                return;
+            }
+            
             // compile right-hand side
             compile_expression(node->assignment.value, chunk, symtab);
             // store into variable
@@ -412,7 +456,7 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
 static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab) {
     switch (node->type) {
         case AST_VARIABLE_DECL: {
-            // var X = <expr>;
+            // Handle both old syntax (var x = value) and new colon syntax (var x: value, let x: value, x: value)
             if (node->variable_decl.initial_value) {
                 compile_expression(node->variable_decl.initial_value, chunk, symtab);
             } else {
@@ -421,7 +465,16 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
                 cval.type = RUNTIME_VALUE_NULL;
                 emit_constant(chunk, cval);
             }
-            int varIndex = symbol_table_get_or_add(symtab, node->variable_decl.variable_name, false);
+            
+            // Use the new mutability-aware symbol table function
+            int varIndex = symbol_table_get_or_add_variable(symtab, 
+                                                           node->variable_decl.variable_name, 
+                                                           node->variable_decl.is_mutable);
+            if (varIndex == -1) {
+                // Error already reported by symbol_table_get_or_add_variable
+                return;
+            }
+            
             emit_byte(chunk, OP_STORE_VAR);
             // Emit 16-bit variable index (big-endian)
             emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));

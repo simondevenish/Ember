@@ -14,6 +14,7 @@ typedef struct {
     char* name;
     int index;       // For variables: index in the VM's "global" or local list
     bool isFunction; // If it's a function name
+    bool is_mutable; // NEW: Track mutability (false for let variables)
 } Symbol;
 
 /**
@@ -42,6 +43,18 @@ void symbol_table_free(SymbolTable* table);
  *        Returns the index that will be used for load/store.
  */
 int symbol_table_get_or_add(SymbolTable* table, const char* name, bool isFunction);
+
+/**
+ * @brief Find or insert a variable symbol with mutability tracking.
+ *        Returns the index that will be used for load/store.
+ */
+int symbol_table_get_or_add_variable(SymbolTable* table, const char* name, bool is_mutable);
+
+/**
+ * @brief Check if a variable is mutable (for assignment validation).
+ *        Returns true if mutable, false if immutable (let), or false if not found.
+ */
+bool symbol_table_is_variable_mutable(SymbolTable* table, const char* name);
 
 /**
  * @brief Compile the given AST into bytecode (stored in `chunk`).

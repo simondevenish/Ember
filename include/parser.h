@@ -28,6 +28,13 @@ typedef enum {
     AST_PROPERTY_ASSIGNMENT  // Property assignment: obj.prop = value
 } ASTNodeType;
 
+// Variable Declaration Types for new colon syntax
+typedef enum {
+    VAR_DECL_VAR,      // var name: value
+    VAR_DECL_LET,      // let name: value  
+    VAR_DECL_IMPLICIT  // name: value (defaults to var)
+} VariableDeclarationType;
+
 // AST Node Structure
 typedef struct ASTNode {
     ASTNodeType type;
@@ -38,7 +45,12 @@ typedef struct ASTNode {
         struct { struct ASTNode* operand; char* op_symbol; } unary_op;  // Unary operation (e.g., -x, !x)
         struct { struct ASTNode* left; struct ASTNode* right; char* op_symbol; } binary_op; // Binary operation (e.g., x + y)
         struct { char* variable; struct ASTNode* value; } assignment; // Assignment (e.g., x = y)
-        struct { char* variable_name; struct ASTNode* initial_value; } variable_decl; // Variable declaration (e.g., var x = 5)
+        struct { 
+            char* variable_name; 
+            struct ASTNode* initial_value; 
+            VariableDeclarationType decl_type;  // NEW: Track declaration type
+            bool is_mutable;                     // NEW: Track mutability (false for let)
+        } variable_decl; // Variable declaration (e.g., var x = 5, let y: 10, z: 20)
         struct { char* function_name; struct ASTNode** arguments; int argument_count; } function_call; // Function call
         struct { struct ASTNode* condition; struct ASTNode* body; struct ASTNode* else_body; } if_statement; // If statement
         struct { struct ASTNode* condition; struct ASTNode* body; } while_loop; // While loop
@@ -199,14 +211,29 @@ ASTNode* parse_switch_case(Parser* parser);
 ASTNode* parse_assignment(Parser* parser);
 
 /**
- * @brief Parse a variable declaration (e.g., var x = 5).
- *        Optionally skip trailing semicolon if in a for-loop header.
- *
+ * @brief Parse a variable declaration using the old syntax (var x = value).
+ * 
  * @param parser The parser instance.
- * @param inForHeader If true, do NOT consume a trailing semicolon.
+ * @param inForHeader Whether this is inside a for loop header.
  * @return ASTNode* The parsed variable declaration node.
  */
 ASTNode* parse_variable_declaration(Parser* parser, bool inForHeader);
+
+/**
+ * @brief Parse a variable declaration using the new colon syntax (var x: value, let x: value, x: value).
+ * 
+ * @param parser The parser instance.
+ * @return ASTNode* The parsed variable declaration node.
+ */
+ASTNode* parse_colon_variable_declaration(Parser* parser);
+
+/**
+ * @brief Parse an implicit variable declaration (identifier: value).
+ * 
+ * @param parser The parser instance.
+ * @return ASTNode* The parsed variable declaration node.
+ */
+ASTNode* parse_implicit_variable_declaration(Parser* parser);
 
 /**
  * @brief Parse an anonymous block (e.g., a block of statements not tied to any specific construct).

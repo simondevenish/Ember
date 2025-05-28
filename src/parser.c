@@ -781,22 +781,79 @@ ASTNode* parse_statement(Parser* parser) {
         return parse_block(parser);
     }
 
-    // Match a variable declaration
+    // Match a variable declaration (old syntax: var x = value)
     if (parser->current_token.type == TOKEN_KEYWORD &&
         strcmp(parser->current_token.value, "var") == 0) {
+        // Check if this is colon syntax: var name: value
+        // We need to look ahead two tokens to see if there's a colon after the identifier
+        // Save current state
+        Lexer saved_lexer = *parser->lexer;
+        Token saved_token = parser->current_token;
+        
+        // Advance past 'var'
+        parser_advance(parser);
+        
+        // Check if next token is identifier
+        if (parser->current_token.type == TOKEN_IDENTIFIER) {
+            // Advance past identifier
+            parser_advance(parser);
+            
+            // Check if next token is colon
+            bool is_colon_syntax = (parser->current_token.type == TOKEN_PUNCTUATION && 
+                                   strcmp(parser->current_token.value, ":") == 0);
+            
+            // Restore parser state
+            *parser->lexer = saved_lexer;
+            parser->current_token = saved_token;
+            
+            if (is_colon_syntax) {
+                return parse_colon_variable_declaration(parser);
+            }
+        } else {
+            // Restore parser state
+            *parser->lexer = saved_lexer;
+            parser->current_token = saved_token;
+        }
+        
         return parse_variable_declaration(parser, false);
     }
 
-    // Match an assignment or function definition
+    // Match let variable declaration (new colon syntax: let name: value)
+    if (parser->current_token.type == TOKEN_KEYWORD &&
+        strcmp(parser->current_token.value, "let") == 0) {
+        return parse_colon_variable_declaration(parser);
+    }
+
+    // Match an assignment, function definition, or implicit variable declaration
     if (parser->current_token.type == TOKEN_IDENTIFIER) {
-        // Peek ahead to check for assignment operator '=' or colon ':'
+        // Peek ahead to check for assignment operator '=', colon ':', or function syntax
         Token next_token = peek_token(parser);
         if (next_token.type == TOKEN_OPERATOR && strcmp(next_token.value, "=") == 0) {
             return parse_assignment(parser);
         }
         // Check for function definition syntax: name: fn(params) { ... }
         else if (next_token.type == TOKEN_PUNCTUATION && strcmp(next_token.value, ":") == 0) {
-            return parse_function_definition(parser);
+            // We need to look ahead further to see if this is 'fn' (function) or a value (implicit var)
+            // Save current state
+            Lexer saved_lexer = *parser->lexer;
+            Token saved_token = parser->current_token;
+            
+            // Advance past identifier and colon
+            parser_advance(parser); // Skip identifier
+            parser_advance(parser); // Skip colon
+            
+            bool is_function = (parser->current_token.type == TOKEN_KEYWORD && 
+                               strcmp(parser->current_token.value, "fn") == 0);
+            
+            // Restore parser state
+            *parser->lexer = saved_lexer;
+            parser->current_token = saved_token;
+            
+            if (is_function) {
+                return parse_function_definition(parser);
+            } else {
+                return parse_implicit_variable_declaration(parser);
+            }
         }
     }
 
@@ -1630,6 +1687,10 @@ ASTNode* parse_variable_declaration(Parser* parser, bool inForHeader) {
     }
     variable_decl_node->variable_decl.variable_name = variable_name;
     variable_decl_node->variable_decl.initial_value = initial_value;
+    
+    // Set the new fields for backward compatibility with old syntax
+    variable_decl_node->variable_decl.decl_type = VAR_DECL_VAR; // Old syntax defaults to var
+    variable_decl_node->variable_decl.is_mutable = true;        // Old syntax is always mutable
 
     // If this is a STANDALONE declaration (not in for-header), consume the semicolon now.
     // If it's inside a for-loop header, we'll rely on parse_for_loop() to handle the ';'.
@@ -1641,6 +1702,142 @@ ASTNode* parse_variable_declaration(Parser* parser, bool inForHeader) {
             free(variable_decl_node);
             return NULL;
         }
+    }
+
+    return variable_decl_node;
+}
+
+ASTNode* parse_colon_variable_declaration(Parser* parser) {
+    // Handle: var name: value, let name: value
+    VariableDeclarationType decl_type;
+    bool is_mutable;
+    
+    // Determine declaration type
+    if (parser->current_token.type == TOKEN_KEYWORD) {
+        if (strcmp(parser->current_token.value, "var") == 0) {
+            decl_type = VAR_DECL_VAR;
+            is_mutable = true;
+        } else if (strcmp(parser->current_token.value, "let") == 0) {
+            decl_type = VAR_DECL_LET;
+            is_mutable = false;
+        } else {
+            fprintf(stderr, "Error: Expected 'var' or 'let' keyword\n");
+            return NULL;
+        }
+        parser_advance(parser); // Skip 'var' or 'let'
+    } else {
+        fprintf(stderr, "Error: Expected variable declaration keyword\n");
+        return NULL;
+    }
+
+    // Ensure the next token is an identifier (variable name)
+    if (parser->current_token.type != TOKEN_IDENTIFIER) {
+        fprintf(stderr, "Error: Expected identifier after variable declaration keyword\n");
+        return NULL;
+    }
+
+    // Store the variable name
+    char* variable_name = strdup(parser->current_token.value);
+    if (!variable_name) {
+        fprintf(stderr, "Error: Memory allocation failed for variable name\n");
+        return NULL;
+    }
+    parser_advance(parser); // Skip the variable name
+
+    // Expect a colon ':'
+    if (parser->current_token.type != TOKEN_PUNCTUATION || 
+        strcmp(parser->current_token.value, ":") != 0) {
+        fprintf(stderr, "Error: Expected ':' after variable name in colon syntax\n");
+        free(variable_name);
+        return NULL;
+    }
+    parser_advance(parser); // Skip the ':'
+
+    // Parse the initializer expression (required in colon syntax)
+    ASTNode* initial_value = parse_expression(parser, 0);
+    if (!initial_value) {
+        fprintf(stderr, "Error: Failed to parse initializer for colon variable declaration\n");
+        free(variable_name);
+        return NULL;
+    }
+
+    // Create the variable declaration node
+    ASTNode* variable_decl_node = create_ast_node(AST_VARIABLE_DECL);
+    if (!variable_decl_node) {
+        fprintf(stderr, "Error: Memory allocation failed for variable declaration node\n");
+        free(variable_name);
+        free_ast(initial_value);
+        return NULL;
+    }
+    
+    variable_decl_node->variable_decl.variable_name = variable_name;
+    variable_decl_node->variable_decl.initial_value = initial_value;
+    variable_decl_node->variable_decl.decl_type = decl_type;
+    variable_decl_node->variable_decl.is_mutable = is_mutable;
+
+    // Expect a semicolon
+    if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
+        report_error(parser, "Expected ';' after colon variable declaration");
+        free_ast(variable_decl_node);
+        return NULL;
+    }
+
+    return variable_decl_node;
+}
+
+ASTNode* parse_implicit_variable_declaration(Parser* parser) {
+    // Handle: identifier: value (implicit var)
+    
+    // Ensure the current token is an identifier
+    if (parser->current_token.type != TOKEN_IDENTIFIER) {
+        fprintf(stderr, "Error: Expected identifier for implicit variable declaration\n");
+        return NULL;
+    }
+
+    // Store the variable name
+    char* variable_name = strdup(parser->current_token.value);
+    if (!variable_name) {
+        fprintf(stderr, "Error: Memory allocation failed for variable name\n");
+        return NULL;
+    }
+    parser_advance(parser); // Skip the variable name
+
+    // Expect a colon ':' (this should already be verified by the caller)
+    if (parser->current_token.type != TOKEN_PUNCTUATION || 
+        strcmp(parser->current_token.value, ":") != 0) {
+        fprintf(stderr, "Error: Expected ':' after variable name in implicit declaration\n");
+        free(variable_name);
+        return NULL;
+    }
+    parser_advance(parser); // Skip the ':'
+
+    // Parse the initializer expression (required in colon syntax)
+    ASTNode* initial_value = parse_expression(parser, 0);
+    if (!initial_value) {
+        fprintf(stderr, "Error: Failed to parse initializer for implicit variable declaration\n");
+        free(variable_name);
+        return NULL;
+    }
+
+    // Create the variable declaration node
+    ASTNode* variable_decl_node = create_ast_node(AST_VARIABLE_DECL);
+    if (!variable_decl_node) {
+        fprintf(stderr, "Error: Memory allocation failed for variable declaration node\n");
+        free(variable_name);
+        free_ast(initial_value);
+        return NULL;
+    }
+    
+    variable_decl_node->variable_decl.variable_name = variable_name;
+    variable_decl_node->variable_decl.initial_value = initial_value;
+    variable_decl_node->variable_decl.decl_type = VAR_DECL_IMPLICIT;
+    variable_decl_node->variable_decl.is_mutable = true; // Implicit defaults to mutable
+
+    // Expect a semicolon
+    if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
+        report_error(parser, "Expected ';' after implicit variable declaration");
+        free_ast(variable_decl_node);
+        return NULL;
     }
 
     return variable_decl_node;

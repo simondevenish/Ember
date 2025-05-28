@@ -760,12 +760,6 @@ ASTNode* parse_statement(Parser* parser) {
         return parse_for_loop(parser);
     }
 
-    // Match a function definition
-    if (parser->current_token.type == TOKEN_KEYWORD &&
-        strcmp(parser->current_token.value, "function") == 0) {
-        return parse_function_definition(parser);
-    }
-
     if (parser->current_token.type == TOKEN_KEYWORD && 
         strcmp(parser->current_token.value, "import") == 0) {
         return parse_import_statement(parser);
@@ -783,12 +777,16 @@ ASTNode* parse_statement(Parser* parser) {
         return parse_variable_declaration(parser, false);
     }
 
-    // Match an assignment
+    // Match an assignment or function definition
     if (parser->current_token.type == TOKEN_IDENTIFIER) {
-        // Peek ahead to check for assignment operator '='
+        // Peek ahead to check for assignment operator '=' or colon ':'
         Token next_token = peek_token(parser);
         if (next_token.type == TOKEN_OPERATOR && strcmp(next_token.value, "=") == 0) {
             return parse_assignment(parser);
+        }
+        // Check for function definition syntax: name: fn(params) { ... }
+        else if (next_token.type == TOKEN_PUNCTUATION && strcmp(next_token.value, ":") == 0) {
+            return parse_function_definition(parser);
         }
     }
 
@@ -879,15 +877,11 @@ ASTNode* parse_block(Parser* parser) {
 }
 
 ASTNode* parse_function_definition(Parser* parser) {
-    // Ensure the function definition starts with the "function" keyword
-    if (!match_token(parser, TOKEN_KEYWORD, "function")) {
-        report_error(parser, "Expected 'function' keyword");
-        return NULL;
-    }
-
+    // Parse the new function definition syntax: name: fn(params) { ... }
+    
     // Expect a function name (identifier)
     if (parser->current_token.type != TOKEN_IDENTIFIER) {
-        report_error(parser, "Expected function name after 'function'");
+        report_error(parser, "Expected function name");
         return NULL;
     }
 
@@ -899,14 +893,28 @@ ASTNode* parse_function_definition(Parser* parser) {
     }
     parser_advance(parser);
 
-    // Expect an opening parenthesis '('
-    if (!match_token(parser, TOKEN_PUNCTUATION, "(")) {
-        report_error(parser, "Expected '(' after function name");
+    // Expect a colon ':'
+    if (!match_token(parser, TOKEN_PUNCTUATION, ":")) {
+        report_error(parser, "Expected ':' after function name");
         free(function_name);
         return NULL;
     }
 
-    // Parse parameters
+    // Expect 'fn' keyword
+    if (!match_token(parser, TOKEN_KEYWORD, "fn")) {
+        report_error(parser, "Expected 'fn' keyword after ':'");
+        free(function_name);
+        return NULL;
+    }
+
+    // Expect an opening parenthesis '('
+    if (!match_token(parser, TOKEN_PUNCTUATION, "(")) {
+        report_error(parser, "Expected '(' after 'fn'");
+        free(function_name);
+        return NULL;
+    }
+
+    // Parse parameters (same logic as original function definition)
     char** parameters = NULL;
     int parameter_count = 0;
 
@@ -995,7 +1003,7 @@ ASTNode* parse_function_definition(Parser* parser) {
         return NULL;
     }
 
-    // Create the function definition AST node
+    // Create the function definition AST node (same as original)
     ASTNode* function_def_node = create_ast_node(AST_FUNCTION_DEF);
     if (!function_def_node) {
         report_error(parser, "Memory allocation failed for function definition node");

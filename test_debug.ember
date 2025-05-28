@@ -1,0 +1,10 @@
+greet: fn(name) {
+    print("Hello, " + name + "!");
+}
+
+print("Before first call");
+greet("World");
+print("After first call");
+print("Before second call");
+greet("Alice");
+print("After second call"); 

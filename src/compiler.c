@@ -184,43 +184,44 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             break;
         }
         case AST_FUNCTION_CALL: {
-            // Special-case "print(…)" as a builtin
-            // TODO(SD) this is an example placeholder
+            // Check if this is a built-in function like print()
             if (strcmp(node->function_call.function_name, "print") == 0) {
-                // Evaluate the arguments (for adventure_game.ember, we assume 1 arg)
+                // Compile arguments for print
                 for (int i = 0; i < node->function_call.argument_count; i++) {
                     compile_expression(node->function_call.arguments[i], chunk, symtab);
                 }
-                // OP_PRINT
                 emit_byte(chunk, OP_PRINT);
+                // OP_PRINT already pops the value, no need for additional OP_POP
             } else {
-                // For user-defined function calls:
-                //  1) push arguments (left->right)
-                for (int i = 0; i < node->function_call.argument_count; i++) {
-                    compile_expression(node->function_call.arguments[i], chunk, symtab);
-                }
-                //  2) Identify function (store index in constant or symbol table)
-                int funcIndex = symbol_table_get_or_add(symtab, node->function_call.function_name, true);
+                // User-defined function call
                 
-                // Check if this is actually a function in the symbol table
-                bool isFunction = false;
+                // First, check if the function exists in the symbol table
+                int funcIndex = -1;
                 for (int i = 0; i < symtab->count; i++) {
-                    if (symtab->symbols[i].index == funcIndex && symtab->symbols[i].isFunction) {
-                        isFunction = true;
+                    if (symtab->symbols[i].isFunction && 
+                        strcmp(symtab->symbols[i].name, node->function_call.function_name) == 0) {
+                        funcIndex = symtab->symbols[i].index;
                         break;
                     }
                 }
                 
-                if (isFunction) {
-                    //  3) OP_CALL <funcIndex> <argCount>
-                    emit_byte(chunk, OP_CALL);
-                    emit_byte(chunk, (uint8_t)funcIndex);
-                    emit_byte(chunk, (uint8_t)node->function_call.argument_count);
-                    printf("COMPILER DEBUG: Emitting OP_CALL for function '%s' with funcIndex=%d, argCount=%d\n", 
-                           node->function_call.function_name, funcIndex, node->function_call.argument_count);
-                } else {
-                    fprintf(stderr, "Compiler Error: Unknown function '%s'\n", node->function_call.function_name);
+                if (funcIndex == -1) {
+                    fprintf(stderr, "Error: Undefined function '%s'\n", node->function_call.function_name);
+                    return;
                 }
+                
+                // Compile arguments in reverse order (so they're popped in correct order)
+                for (int i = node->function_call.argument_count - 1; i >= 0; i--) {
+                    compile_expression(node->function_call.arguments[i], chunk, symtab);
+                }
+                
+                // Emit OP_CALL with function index and argument count
+                emit_byte(chunk, OP_CALL);
+                emit_byte(chunk, (uint8_t)funcIndex);
+                emit_byte(chunk, (uint8_t)node->function_call.argument_count);
+                
+                printf("COMPILER DEBUG: Function call '%s' using funcIndex: %d, argCount: %d\n",
+                       node->function_call.function_name, funcIndex, node->function_call.argument_count);
             }
             break;
         }
@@ -624,30 +625,32 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             break;
         }
         case AST_FUNCTION_DEF: {
-            // Store function in symbol table
-            int funcIndex = symbol_table_get_or_add(symtab, node->function_def.function_name, true);
+            // Emit a jump to skip the function body during normal execution
+            emit_byte(chunk, OP_JUMP);
+            int jump_addr = chunk->code_count;
+            emit_byte(chunk, 0); // Placeholder for jump distance high byte
+            emit_byte(chunk, 0); // Placeholder for jump distance low byte
+
+            // Record the function start IP in the constants table
+            int function_start_ip = chunk->code_count;
+            RuntimeValue func_ip_value;
+            func_ip_value.type = RUNTIME_VALUE_NUMBER;
+            func_ip_value.number_value = (double)function_start_ip;
+            int func_const_index = add_constant(chunk, func_ip_value);
             
-            // Emit a jump to skip over the function body during normal execution
-            int skipJump = emit_jump(chunk, OP_JUMP);
+            // Store function metadata in symbol table
+            int func_symbol_index = symbol_table_get_or_add(symtab, node->function_def.function_name, true);
             
-            // Record the start of the function body
-            int functionStart = chunk->code_count;
-            
-            // Store function metadata in a constant for later retrieval
-            // For now, we'll use a simple approach where the VM can find functions by their start IP
-            RuntimeValue funcInfo;
-            funcInfo.type = RUNTIME_VALUE_NUMBER;
-            funcInfo.number_value = (double)functionStart; // Store start IP as a number
-            
-            // Add function info to constants table
-            int funcConstIndex = vm_chunk_add_constant(chunk, funcInfo);
-            
-            // Store the function constant index in the symbol table
-            // (This is a hack - in a real implementation we'd have a proper function table)
-            symtab->symbols[funcIndex].index = funcConstIndex;
-            
-            // Map function parameters to local variable indices
-            // Parameters will be stored at indices 256+ during function calls
+            // Update the symbol table entry to store the constant index instead of symbol index
+            for (int i = 0; i < symtab->count; i++) {
+                if (symtab->symbols[i].isFunction && 
+                    strcmp(symtab->symbols[i].name, node->function_def.function_name) == 0) {
+                    symtab->symbols[i].index = func_const_index; // Store constant index, not symbol index
+                    break;
+                }
+            }
+
+            // Map parameters to local variable indices (starting from 256)
             for (int i = 0; i < node->function_def.parameter_count; i++) {
                 const char* paramName = node->function_def.parameters[i];
                 
@@ -664,8 +667,6 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
                     // Parameter name conflicts with existing symbol
                     // Override the existing symbol's index to point to local variable slot
                     symtab->symbols[existingIndex].index = 256 + i;
-                    printf("COMPILER DEBUG: Mapped parameter '%s' to local index %d (overriding existing)\n", 
-                           paramName, 256 + i);
                 } else {
                     // Add new parameter to symbol table with local index
                     ensure_symtab_capacity(symtab);
@@ -674,22 +675,20 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
                     symtab->symbols[paramIndex].index = 256 + i; // Local variable slot
                     symtab->symbols[paramIndex].isFunction = false;
                     symtab->count++;
-                    printf("COMPILER DEBUG: Added parameter '%s' to symbol table at local index %d\n", 
-                           paramName, 256 + i);
                 }
             }
-            
-            // Compile function body
-            if (node->function_def.body) {
-                compile_node(node->function_def.body, chunk, symtab);
-            }
-            
-            // Emit return instruction at end of function
+
+            // Compile the function body
+            compile_statement(node->function_def.body, chunk, symtab);
+
+            // Emit return at the end of function
             emit_byte(chunk, OP_RETURN);
-            
-            // Patch the skip jump to point here (after the function)
-            patch_jump(chunk, skipJump);
-            
+
+            // Patch the jump to skip the function body
+            int jump_distance = chunk->code_count - jump_addr - 2; // -2 because we have 2 bytes for the offset
+            chunk->code[jump_addr] = (uint8_t)((jump_distance >> 8) & 0xFF); // High byte
+            chunk->code[jump_addr + 1] = (uint8_t)(jump_distance & 0xFF);    // Low byte
+
             break;
         }
         case AST_BLOCK: {

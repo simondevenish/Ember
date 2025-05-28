@@ -1,3 +1,10 @@
 // Simple test for nested properties
 print("Testing nested properties");
 // Create object
+
+greet: fn(name) {
+    print("Hello, " + name + "!");
+}
+
+greet("World");
+greet("Alice");

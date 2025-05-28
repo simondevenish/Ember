@@ -175,13 +175,13 @@ void vm_free(VM* vm) {
 }
 
 void vm_push(VM* vm, RuntimeValue value) {
-    // Check for overflow
-    if (vm->stack_top - vm->stack >= vm->stack_capacity) {
-        fprintf(stderr, "VM Error: Stack overflow.\n");
-        return;
+    if (vm->stack_top >= vm->stack + vm->stack_capacity) {
+        fprintf(stderr, "VM Error: Stack overflow\n");
+        exit(1);
     }
-    *vm->stack_top = runtime_value_copy(&value);
+    *vm->stack_top = value;
     vm->stack_top++;
+    printf("VM DEBUG: PUSH - stack size now: %ld\n", vm->stack_top - vm->stack);
 }
 
 RuntimeValue vm_pop(VM* vm) {
@@ -193,7 +193,9 @@ RuntimeValue vm_pop(VM* vm) {
     vm->stack_top--;
     
     // Debug what we're popping
-    print_runtime_value_type("Popping from stack", vm->stack_top);
+    // print_runtime_value_type("Popping from stack", vm->stack_top);
+    
+    printf("VM DEBUG: POP - stack size now: %ld\n", vm->stack_top - vm->stack);
     
     return *vm->stack_top;
 }
@@ -448,12 +450,14 @@ static bool vm_set_nested_property(RuntimeValue* obj, const char* property_path,
         bool found = false;
         RuntimeValue* next = NULL;
         
-        printf("VM DEBUG: Looking for property '%s' (segment %d)\n", segments[i], i);
+        // Trace the instruction
+        // printf("VM TRACE: Looking for property '%s' (segment %d)\n", segments[i], i);
         
         for (int j = 0; j < current->object_value.count; j++) {
             if (strcmp(current->object_value.keys[j], segments[i]) == 0) {
                 // Found the property
-                printf("VM DEBUG: Found property '%s'\n", segments[i]);
+                // Trace the instruction
+                // printf("VM TRACE: Found property '%s'\n", segments[i]);
                 
                 // Check if it's an object
                 if (current->object_value.values[j].type == RUNTIME_VALUE_OBJECT) {
@@ -668,7 +672,7 @@ int vm_run(VM* vm) {
     }
     
     for (;;) {
-        // Fetch the next instruction
+        // Decode and execute the instruction
         uint8_t instruction = *vm->ip++;
         
         // Check if we're at the end of the bytecode
@@ -698,8 +702,8 @@ int vm_run(VM* vm) {
         }
         
         // Trace the instruction
-        printf("VM TRACE: Executing %s (%d) at offset %ld\n", 
-               instruction_name, instruction, (vm->ip - 1 - vm->chunk->code));
+        // printf("VM TRACE: Executing %s (%d) at offset %ld\n", 
+        //        instruction_name, instruction, (vm->ip - 1 - vm->chunk->code));
                
         switch (instruction) {
 
@@ -716,7 +720,7 @@ int vm_run(VM* vm) {
             case OP_POP: {
                 // Check if we have something to pop
                 if (vm->stack_top <= vm->stack) {
-                    printf("VM Warning: Attempted to pop from empty stack. Ignoring.\n");
+                    // Attempted to pop from empty stack, ignore silently
                 } else {
                     vm_pop(vm);
                 }
@@ -758,16 +762,8 @@ int vm_run(VM* vm) {
                 // The next two bytes are the variable index (16-bit, big-endian)
                 uint16_t varIndex = (uint16_t)(((*vm->ip++) << 8) | (*vm->ip++));
                 
-                // Print debug information about the variable
-                char label[40];
-                snprintf(label, sizeof(label), "Loading variable at index %d", varIndex);
-                print_runtime_value_type(label, &g_globals[varIndex]);
-                
                 // Make a deep copy of the global variable
                 RuntimeValue value = runtime_value_copy(&g_globals[varIndex]);
-                
-                // Print the copied value for debug
-                print_runtime_value_type("Loaded value (copy)", &value);
                 
                 vm_push(vm, value);
                 break;
@@ -780,19 +776,15 @@ int vm_run(VM* vm) {
                 // Pop top of stack
                 RuntimeValue value = vm_pop(vm);
                 
-                // Debug the value before storing
-                char label[40];
-                snprintf(label, sizeof(label), "Storing to variable at index %d", varIndex);
-                print_runtime_value_type(label, &value);
-                
                 // Free any existing value in the global slot to prevent memory leaks
                 runtime_free_value(&g_globals[varIndex]);
                 
                 // Store a deep copy of the value in globals
                 g_globals[varIndex] = runtime_value_copy(&value);
                 
-                // Debug the copied value after storing
-                print_runtime_value_type("Value after storing (copy)", &g_globals[varIndex]);
+                // Free the original value since we made a copy
+                runtime_free_value(&value);
+                
                 break;
             }
 
@@ -1108,10 +1100,12 @@ int vm_run(VM* vm) {
                 }
                 
                 int functionStartIP = (int)funcInfo.number_value;
-                printf("VM DEBUG: Calling user-defined function at IP %d\n", functionStartIP);
+                printf("VM DEBUG: Calling function at IP %d\n", functionStartIP);
                 
                 // Save current IP for return
                 uint8_t* returnIP = vm->ip;
+                printf("VM DEBUG: Current IP offset: %ld, will return to: %ld\n", 
+                       vm->ip - vm->chunk->code, returnIP - vm->chunk->code);
                 
                 // Pop arguments and store them as local variables
                 RuntimeValue* args = malloc(argCount * sizeof(RuntimeValue));
@@ -1124,10 +1118,6 @@ int vm_run(VM* vm) {
                     int localVarIndex = 256 + i; // Use high indices for locals
                     if (localVarIndex < 512) { // Ensure we don't overflow
                         g_globals[localVarIndex] = args[i];
-                        printf("VM DEBUG: Stored argument %d at local index %d\n", i, localVarIndex);
-                        if (args[i].type == RUNTIME_VALUE_STRING) {
-                            printf("VM DEBUG: Argument %d value: '%s'\n", i, args[i].string_value);
-                        }
                     }
                 }
                 
@@ -1153,30 +1143,31 @@ int vm_run(VM* vm) {
                 // 2. Restore the instruction pointer
                 // 3. Continue execution
                 
-                printf("VM DEBUG: OP_RETURN - returning from function\n");
+                printf("VM DEBUG: OP_RETURN - stack size: %ld\n", vm->stack_top - vm->stack);
                 
-                // Check if we have a return marker on the stack
+                // Check if we have anything on the stack
                 if (vm->stack_top <= vm->stack) {
-                    // No return marker, this is the end of the main program
-                    printf("VM DEBUG: End of main program\n");
+                    // No values on stack - this could be end of main program or empty function return
+                    // We should only end if we're truly at the end of the bytecode
+                    printf("VM DEBUG: Empty stack, ending program\n");
                     return 0;
                 }
                 
                 // Look for the return marker (we pushed it as a number)
-                // In a proper implementation, we'd have a call stack
-                // For now, let's assume the return marker is on the stack
                 RuntimeValue returnMarker = vm_pop(vm);
+                printf("VM DEBUG: Popped value type: %d\n", returnMarker.type);
                 
                 if (returnMarker.type == RUNTIME_VALUE_NUMBER) {
-                    // Restore the instruction pointer
+                    // This is a return marker - restore the instruction pointer
                     int returnOffset = (int)returnMarker.number_value;
                     vm->ip = vm->chunk->code + returnOffset;
                     printf("VM DEBUG: Returning to IP offset %d\n", returnOffset);
                 } else {
-                    // This wasn't a return marker, put it back and end execution
+                    // This wasn't a return marker, it's some other value
+                    // Put it back on the stack and continue execution
                     vm_push(vm, returnMarker);
-                    printf("VM DEBUG: No return marker found, ending execution\n");
-                    return 0;
+                    printf("VM DEBUG: Not a return marker, continuing execution\n");
+                    // Don't return - just continue execution
                 }
                 
                 break;
@@ -1275,6 +1266,10 @@ int vm_run(VM* vm) {
                     // For arrays or other objects, do something minimal:
                     printf("[Object or Array]\n");
                 }
+                
+                // Push null back onto the stack so OP_POP has something to consume
+                RuntimeValue null_result = {.type = RUNTIME_VALUE_NULL};
+                vm_push(vm, null_result);
                 break;
             }
 

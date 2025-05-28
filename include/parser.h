@@ -156,6 +156,14 @@ ASTNode* parse_statement(Parser* parser);
 ASTNode* parse_block(Parser* parser);
 
 /**
+ * @brief Parse an indentation-based block of statements.
+ * 
+ * @param parser The parser instance.
+ * @return ASTNode* The parsed block node.
+ */
+ASTNode* parse_indented_block(Parser* parser);
+
+/**
  * @brief Parse a function definition.
  * 
  * @param parser The parser instance.
@@ -260,6 +268,13 @@ void parser_recover(Parser* parser);
  * @return false Otherwise.
  */
 bool match_token(Parser* parser, ScriptTokenType type, const char* value);
+
+/**
+ * @brief Optionally consume a semicolon token (for backward compatibility).
+ * 
+ * @param parser The parser instance.
+ */
+void consume_optional_semicolon(Parser* parser);
 
 /**
  * @brief Generate a parser error with a custom message.

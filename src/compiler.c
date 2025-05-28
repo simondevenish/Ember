@@ -222,6 +222,10 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
                 emit_byte(chunk, OP_LTE);
             } else if (strcmp(op, ">=") == 0) {
                 emit_byte(chunk, OP_GTE);
+            } else if (strcmp(op, "&&") == 0) {
+                emit_byte(chunk, OP_AND);
+            } else if (strcmp(op, "||") == 0) {
+                emit_byte(chunk, OP_OR);
             } else {
                 fprintf(stderr, "Compiler error: Unsupported binary operator '%s'\n", op);
             }

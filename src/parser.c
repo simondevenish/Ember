@@ -752,6 +752,11 @@ ASTNode* parse_expression(Parser* parser, int min_precedence) {
 }
 
 ASTNode* parse_statement(Parser* parser) {
+    // Skip any leading newlines
+    while (parser->current_token.type == TOKEN_NEWLINE) {
+        parser_advance(parser);
+    }
+    
     // Match an if statement
     if (parser->current_token.type == TOKEN_KEYWORD &&
         strcmp(parser->current_token.value, "if") == 0) {
@@ -868,23 +873,15 @@ ASTNode* parse_statement(Parser* parser) {
             // Handle property assignment: obj.prop = value
             ASTNode* property_assignment = parse_property_assignment(parser, expression);
             
-            // Expect a semicolon after the assignment
-            if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
-                report_error(parser, "Expected ';' after property assignment");
-                free_ast(property_assignment);
-                return NULL;
-            }
+            // Optionally consume a semicolon after the assignment
+            consume_optional_semicolon(parser);
             
             return property_assignment;
         }
         
         // It's a regular expression statement
-        // Expect a semicolon after the statement
-        if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
-            report_error(parser, "Expected ';' after statement");
-            free_ast(expression);
-            return NULL;
-        }
+        // Optionally consume a semicolon after the statement
+        consume_optional_semicolon(parser);
         return expression;
     }
 
@@ -938,6 +935,64 @@ ASTNode* parse_block(Parser* parser) {
         report_error(parser, "Expected '}' to close block");
         free_ast(block_node);
         return NULL;
+    }
+
+    return block_node;
+}
+
+ASTNode* parse_indented_block(Parser* parser) {
+    // Expect an INDENT token to start the indented block
+    if (parser->current_token.type != TOKEN_INDENT) {
+        report_error(parser, "Expected indented block");
+        return NULL;
+    }
+    
+    // Consume the INDENT token
+    parser_advance(parser);
+    
+    // Allocate memory for the block node
+    ASTNode* block_node = create_ast_node(AST_BLOCK);
+    if (!block_node) {
+        report_error(parser, "Memory allocation failed for indented block node");
+        return NULL;
+    }
+
+    block_node->block.statements = NULL;
+    block_node->block.statement_count = 0;
+
+    // Parse statements until we encounter a DEDENT token
+    while (parser->current_token.type != TOKEN_DEDENT && 
+           parser->current_token.type != TOKEN_EOF) {
+        
+        // Skip newlines between statements
+        if (parser->current_token.type == TOKEN_NEWLINE) {
+            parser_advance(parser);
+            continue;
+        }
+        
+        ASTNode* statement = parse_statement(parser);
+        if (!statement) {
+            // Handle parsing error within the block
+            free_ast(block_node);
+            return NULL;
+        }
+
+        // Add the parsed statement to the block's statements array
+        ASTNode** temp = realloc(block_node->block.statements,
+                                 sizeof(ASTNode*) * (block_node->block.statement_count + 1));
+        if (!temp) {
+            report_error(parser, "Memory allocation failed for indented block statements");
+            free_ast(statement);
+            free_ast(block_node);
+            return NULL;
+        }
+        block_node->block.statements = temp;
+        block_node->block.statements[block_node->block.statement_count++] = statement;
+    }
+
+    // After the loop, consume the DEDENT token
+    if (parser->current_token.type == TOKEN_DEDENT) {
+        parser_advance(parser);
     }
 
     return block_node;
@@ -1058,8 +1113,33 @@ ASTNode* parse_function_definition(Parser* parser) {
         return NULL;
     }
 
-    // Parse the function body (block)
-    ASTNode* body = parse_block(parser);
+    // Parse the function body - support both brace-based and indentation-based blocks
+    ASTNode* body = NULL;
+    
+    // Skip any newlines, indents, or dedents before the body
+    while (parser->current_token.type == TOKEN_NEWLINE || 
+           parser->current_token.type == TOKEN_INDENT || 
+           parser->current_token.type == TOKEN_DEDENT) {
+        parser_advance(parser);
+    }
+    
+    if (parser->current_token.type == TOKEN_PUNCTUATION && 
+        strcmp(parser->current_token.value, "{") == 0) {
+        // Brace-based block
+        body = parse_block(parser);
+    } else if (parser->current_token.type == TOKEN_INDENT) {
+        // Indentation-based block
+        body = parse_indented_block(parser);
+    } else {
+        report_error(parser, "Expected '{' or indented block for function body");
+        free(function_name);
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+    
     if (!body) {
         report_error(parser, "Failed to parse function body");
         free(function_name);
@@ -1156,12 +1236,8 @@ ASTNode* parse_import_statement(Parser* parser)
         parser_advance(parser); // consume the identifier
     }
 
-    // 4) Expect a semicolon to close the import statement
-    if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
-        report_error(parser, "Expected ';' after import statement");
-        free(import_path);
-        return NULL;
-    }
+    // 4) Optionally consume a semicolon to close the import statement
+    consume_optional_semicolon(parser);
 
     // 5) Build the AST_IMPORT node
     ASTNode* node = create_ast_node(AST_IMPORT);
@@ -1203,8 +1279,26 @@ ASTNode* parse_if_statement(Parser* parser) {
         return NULL;
     }
 
-    // Parse the body of the if statement
-    ASTNode* body = parse_block(parser);
+    // Skip any newlines before the body
+    while (parser->current_token.type == TOKEN_NEWLINE) {
+        parser_advance(parser);
+    }
+
+    // Parse the body of the if statement - support both brace-based and indentation-based blocks
+    ASTNode* body = NULL;
+    if (parser->current_token.type == TOKEN_PUNCTUATION && 
+        strcmp(parser->current_token.value, "{") == 0) {
+        // Brace-based block
+        body = parse_block(parser);
+    } else if (parser->current_token.type == TOKEN_INDENT) {
+        // Indentation-based block
+        body = parse_indented_block(parser);
+    } else {
+        report_error(parser, "Expected '{' or indented block for if statement body");
+        free_ast(condition);
+        return NULL;
+    }
+    
     if (!body) {
         fprintf(stderr, "Error: Failed to parse body of 'if' statement\n");
         free_ast(condition);
@@ -1226,6 +1320,11 @@ ASTNode* parse_if_statement(Parser* parser) {
 
     // Check for 'else' clause
     if (match_token(parser, TOKEN_KEYWORD, "else")) {
+        // Skip any newlines after 'else'
+        while (parser->current_token.type == TOKEN_NEWLINE) {
+            parser_advance(parser);
+        }
+        
         // Peek to see if the next token is 'if' without advancing
         if (parser->current_token.type == TOKEN_KEYWORD && strcmp(parser->current_token.value, "if") == 0) {
             // Handle 'else if' by recursively parsing as an 'if' statement
@@ -1237,8 +1336,21 @@ ASTNode* parse_if_statement(Parser* parser) {
             }
             if_node->if_statement.else_body = else_if_node;
         } else {
-            // Parse else block
-            ASTNode* else_body = parse_block(parser);
+            // Parse else block - support both brace-based and indentation-based blocks
+            ASTNode* else_body = NULL;
+            if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                strcmp(parser->current_token.value, "{") == 0) {
+                // Brace-based block
+                else_body = parse_block(parser);
+            } else if (parser->current_token.type == TOKEN_INDENT) {
+                // Indentation-based block
+                else_body = parse_indented_block(parser);
+            } else {
+                report_error(parser, "Expected '{' or indented block for else clause");
+                free_ast(if_node);
+                return NULL;
+            }
+            
             if (!else_body) {
                 fprintf(stderr, "Error: Failed to parse 'else' body\n");
                 free_ast(if_node);
@@ -1279,8 +1391,26 @@ ASTNode* parse_while_loop(Parser* parser) {
         return NULL;
     }
 
-    // Parse the body of the while loop
-    ASTNode* body = parse_block(parser);
+    // Skip any newlines before the body
+    while (parser->current_token.type == TOKEN_NEWLINE) {
+        parser_advance(parser);
+    }
+
+    // Parse the body of the while loop - support both brace-based and indentation-based blocks
+    ASTNode* body = NULL;
+    if (parser->current_token.type == TOKEN_PUNCTUATION && 
+        strcmp(parser->current_token.value, "{") == 0) {
+        // Brace-based block
+        body = parse_block(parser);
+    } else if (parser->current_token.type == TOKEN_INDENT) {
+        // Indentation-based block
+        body = parse_indented_block(parser);
+    } else {
+        report_error(parser, "Expected '{' or indented block for while loop body");
+        free_ast(condition);
+        return NULL;
+    }
+    
     if (!body) {
         fprintf(stderr, "Error: Failed to parse body of 'while' loop\n");
         free_ast(condition);
@@ -1616,14 +1746,8 @@ ASTNode* parse_assignment(Parser* parser) {
         return NULL;
     }
 
-    // Expect a semicolon ';' after the assignment
-    if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
-        report_error(parser, "Expected ';' after assignment");
-        free(variable_name);
-        free_ast(value_node);
-        free(assignment_node);
-        return NULL;
-    }
+    // Optionally consume a semicolon after the assignment
+    consume_optional_semicolon(parser);
 
     assignment_node->type = AST_ASSIGNMENT;
     assignment_node->assignment.variable = variable_name;
@@ -1692,16 +1816,10 @@ ASTNode* parse_variable_declaration(Parser* parser, bool inForHeader) {
     variable_decl_node->variable_decl.decl_type = VAR_DECL_VAR; // Old syntax defaults to var
     variable_decl_node->variable_decl.is_mutable = true;        // Old syntax is always mutable
 
-    // If this is a STANDALONE declaration (not in for-header), consume the semicolon now.
+    // If this is a STANDALONE declaration (not in for-header), optionally consume semicolon.
     // If it's inside a for-loop header, we'll rely on parse_for_loop() to handle the ';'.
     if (!inForHeader) {
-        if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
-            report_error(parser, "Expected ';' after variable declaration");
-            free(variable_name);
-            if (initial_value) free_ast(initial_value);
-            free(variable_decl_node);
-            return NULL;
-        }
+        consume_optional_semicolon(parser);
     }
 
     return variable_decl_node;
@@ -1775,12 +1893,8 @@ ASTNode* parse_colon_variable_declaration(Parser* parser) {
     variable_decl_node->variable_decl.decl_type = decl_type;
     variable_decl_node->variable_decl.is_mutable = is_mutable;
 
-    // Expect a semicolon
-    if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
-        report_error(parser, "Expected ';' after colon variable declaration");
-        free_ast(variable_decl_node);
-        return NULL;
-    }
+    // Optionally consume a semicolon
+    consume_optional_semicolon(parser);
 
     return variable_decl_node;
 }
@@ -1833,12 +1947,8 @@ ASTNode* parse_implicit_variable_declaration(Parser* parser) {
     variable_decl_node->variable_decl.decl_type = VAR_DECL_IMPLICIT;
     variable_decl_node->variable_decl.is_mutable = true; // Implicit defaults to mutable
 
-    // Expect a semicolon
-    if (!match_token(parser, TOKEN_PUNCTUATION, ";")) {
-        report_error(parser, "Expected ';' after implicit variable declaration");
-        free_ast(variable_decl_node);
-        return NULL;
-    }
+    // Optionally consume a semicolon
+    consume_optional_semicolon(parser);
 
     return variable_decl_node;
 }
@@ -1921,6 +2031,14 @@ bool match_token(Parser* parser, ScriptTokenType type, const char* value) {
     // Token matches; advance to the next token
     parser_advance(parser);
     return true;
+}
+
+// Helper function to optionally consume a semicolon (for backward compatibility)
+void consume_optional_semicolon(Parser* parser) {
+    if (parser->current_token.type == TOKEN_PUNCTUATION && 
+        strcmp(parser->current_token.value, ";") == 0) {
+        parser_advance(parser);
+    }
 }
 
 ParserError* parser_error(Parser* parser, const char* message) {
@@ -2229,6 +2347,19 @@ ASTNode* parse_object_literal(Parser* parser) {
 
     // Parse properties
     do {
+        // Skip any newlines, indents, or dedents before parsing the key
+        while (parser->current_token.type == TOKEN_NEWLINE || 
+               parser->current_token.type == TOKEN_INDENT || 
+               parser->current_token.type == TOKEN_DEDENT) {
+            parser_advance(parser);
+        }
+        
+        // Check if we've reached the end of the object
+        if (parser->current_token.type == TOKEN_PUNCTUATION && 
+            strcmp(parser->current_token.value, "}") == 0) {
+            break;
+        }
+        
         // Parse the key, which must be an identifier
         if (parser->current_token.type != TOKEN_IDENTIFIER && 
             parser->current_token.type != TOKEN_STRING) {
@@ -2325,10 +2456,22 @@ ASTNode* parse_object_literal(Parser* parser) {
         values[property_count] = value;
         property_count++;
 
+        // Skip any newlines, indents, or dedents after the property value
+        while (parser->current_token.type == TOKEN_NEWLINE || 
+               parser->current_token.type == TOKEN_INDENT || 
+               parser->current_token.type == TOKEN_DEDENT) {
+            parser_advance(parser);
+        }
+
         // Look for ',' or '}'
         if (parser->current_token.type == TOKEN_PUNCTUATION && 
             strcmp(parser->current_token.value, ",") == 0) {
             parser_advance(parser); // Skip ','
+            
+            // Skip any newlines after the comma
+            while (parser->current_token.type == TOKEN_NEWLINE) {
+                parser_advance(parser);
+            }
             
             // Handle trailing comma, if the next token is '}'
             if (parser->current_token.type == TOKEN_PUNCTUATION && 
@@ -2650,8 +2793,32 @@ ASTNode* parse_function_expression(Parser* parser) {
         return NULL;
     }
 
-    // Parse the function body (block)
-    ASTNode* body = parse_block(parser);
+    // Parse the function body - support both brace-based and indentation-based blocks
+    ASTNode* body = NULL;
+    
+    // Skip any newlines, indents, or dedents before the body
+    while (parser->current_token.type == TOKEN_NEWLINE || 
+           parser->current_token.type == TOKEN_INDENT || 
+           parser->current_token.type == TOKEN_DEDENT) {
+        parser_advance(parser);
+    }
+    
+    if (parser->current_token.type == TOKEN_PUNCTUATION && 
+        strcmp(parser->current_token.value, "{") == 0) {
+        // Brace-based block
+        body = parse_block(parser);
+    } else if (parser->current_token.type == TOKEN_INDENT) {
+        // Indentation-based block
+        body = parse_indented_block(parser);
+    } else {
+        report_error(parser, "Expected '{' or indented block for function body");
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+    
     if (!body) {
         report_error(parser, "Failed to parse function body");
         for (int i = 0; i < parameter_count; i++) {
@@ -2661,7 +2828,7 @@ ASTNode* parse_function_expression(Parser* parser) {
         return NULL;
     }
 
-    // Create the function definition node (we'll use the same AST node type)
+    // Create the function definition node
     ASTNode* function_node = create_ast_node(AST_FUNCTION_DEF);
     if (!function_node) {
         report_error(parser, "Memory allocation failed for function expression node");
@@ -2673,7 +2840,7 @@ ASTNode* parse_function_expression(Parser* parser) {
         return NULL;
     }
 
-    // For function expressions, we use a generated name or NULL
+    // For function expressions, we use a generated name
     function_node->function_def.function_name = strdup("<anonymous>");
     function_node->function_def.parameters = parameters;
     function_node->function_def.parameter_count = parameter_count;

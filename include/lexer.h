@@ -13,6 +13,9 @@ typedef enum {
     TOKEN_PUNCTUATION, // Punctuation (e.g., (, ), {, }, ;)
     TOKEN_BOOLEAN,     // Boolean values (e.g., true, false)
     TOKEN_NULL,        // Null value (e.g., null or nil)
+    TOKEN_INDENT,      // Indentation increase
+    TOKEN_DEDENT,      // Indentation decrease
+    TOKEN_NEWLINE,     // Significant newline (for indentation tracking)
     TOKEN_EOF,         // End of file/input
     TOKEN_ERROR        // Error token type
 } ScriptTokenType;
@@ -25,6 +28,9 @@ typedef struct {
     int column;      // Column number of the token
 } Token;
 
+// Indentation stack for tracking nested indentation levels
+#define MAX_INDENT_LEVELS 64
+
 // Lexer structure
 typedef struct {
     const char* source;  // Script source code
@@ -32,6 +38,14 @@ typedef struct {
     int line;            // Current line in the source
     int column;          // Current column in the source
     char current_char;   // Current character being processed
+    
+    // Indentation tracking
+    int indent_stack[MAX_INDENT_LEVELS];  // Stack of indentation levels
+    int indent_stack_size;                // Current size of indent stack
+    int current_indent;                   // Current line's indentation level
+    bool at_line_start;                   // True if we're at the start of a line
+    bool pending_dedents;                 // True if we have pending DEDENT tokens
+    int dedent_count;                     // Number of pending DEDENT tokens
 } Lexer;
 
 /**
@@ -99,5 +113,37 @@ void free_token(Token* token);
  * @param token The token to print.
  */
 void print_token(const Token* token);
+
+/**
+ * @brief Handles indentation at the beginning of a line.
+ * 
+ * @param lexer The lexer instance.
+ * @return Token The appropriate INDENT, DEDENT, or next token.
+ */
+Token lexer_handle_indentation(Lexer* lexer);
+
+/**
+ * @brief Calculates the indentation level of the current line.
+ * 
+ * @param lexer The lexer instance.
+ * @return int The indentation level (number of spaces/tabs).
+ */
+int lexer_calculate_indentation(Lexer* lexer);
+
+/**
+ * @brief Pushes an indentation level onto the stack.
+ * 
+ * @param lexer The lexer instance.
+ * @param level The indentation level to push.
+ */
+void lexer_push_indent(Lexer* lexer, int level);
+
+/**
+ * @brief Pops an indentation level from the stack.
+ * 
+ * @param lexer The lexer instance.
+ * @return int The popped indentation level.
+ */
+int lexer_pop_indent(Lexer* lexer);
 
 #endif // LEXER_H

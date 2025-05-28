@@ -9,19 +9,32 @@
 
 
 void lexer_init(Lexer* lexer, const char* source) {
-  lexer->source = source;
+    lexer->source = source;
     lexer->position = 0;
     lexer->line = 1;
     lexer->column = 1;
     lexer->current_char = source[0];
+    
+    // Initialize indentation tracking
+    lexer->indent_stack[0] = 0;  // Base indentation level
+    lexer->indent_stack_size = 1;
+    lexer->current_indent = 0;
+    lexer->at_line_start = true;
+    lexer->pending_dedents = false;
+    lexer->dedent_count = 0;
 }
 
 void lexer_advance(Lexer* lexer) {
     if (lexer->current_char == '\n') {
         lexer->line++;
         lexer->column = 1; // Reset column to 1 at the start of a new line
+        lexer->at_line_start = true;  // Mark that we're at the start of a new line
     } else {
         lexer->column++;
+        // Only set at_line_start to false if we encounter a non-whitespace character
+        if (lexer->current_char != ' ' && lexer->current_char != '\t') {
+            lexer->at_line_start = false;
+        }
     }
     lexer->position++;
     lexer->current_char = lexer->source[lexer->position];
@@ -36,8 +49,8 @@ char lexer_peek(Lexer* lexer) {
 
 void lexer_skip_whitespace_and_comments(Lexer* lexer) {
     while (lexer->current_char != '\0') {
-        if (lexer->current_char == ' ' || lexer->current_char == '\t' || lexer->current_char == '\n' || lexer->current_char == '\r') {
-            // Skip whitespace
+        if (lexer->current_char == ' ' || lexer->current_char == '\t' || lexer->current_char == '\r') {
+            // Skip whitespace (but not newlines - they're significant for indentation)
             lexer_advance(lexer);
         } else if (lexer->current_char == '/' && lexer_peek(lexer) == '/') {
             // Skip single-line comments
@@ -88,11 +101,41 @@ char* lexer_read_identifier(Lexer* lexer) {
 
 
 Token lexer_next_token(Lexer* lexer) {
+    // Handle indentation at the start of lines
+    if (lexer->at_line_start) {
+        return lexer_handle_indentation(lexer);
+    }
+    
+    // Handle pending DEDENT tokens
+    if (lexer->pending_dedents && lexer->dedent_count > 0) {
+        lexer->dedent_count--;
+        if (lexer->dedent_count == 0) {
+            lexer->pending_dedents = false;
+        }
+        return (Token){TOKEN_DEDENT, NULL, lexer->line, lexer->column};
+    }
+    
     lexer_skip_whitespace_and_comments(lexer);
 
-    // End of input
+    // End of input - emit any remaining DEDENT tokens
     if (lexer->current_char == '\0') {
+        if (lexer->indent_stack_size > 1) {
+            // Emit DEDENT tokens to close all indentation levels
+            lexer->dedent_count = lexer->indent_stack_size - 1;
+            lexer->indent_stack_size = 1;
+            if (lexer->dedent_count > 0) {
+                lexer->pending_dedents = true;
+                lexer->dedent_count--;
+                return (Token){TOKEN_DEDENT, NULL, lexer->line, lexer->column};
+            }
+        }
         return (Token){TOKEN_EOF, NULL, lexer->line, lexer->column};
+    }
+
+    // Handle newlines as significant tokens for indentation
+    if (lexer->current_char == '\n') {
+        lexer_advance(lexer);
+        return (Token){TOKEN_NEWLINE, NULL, lexer->line, lexer->column};
     }
 
     // Identifiers and keywords
@@ -263,6 +306,12 @@ void print_token(const Token* token) {
         printf("Token: EOF\n");
     } else if (token->type == TOKEN_ERROR) {
         printf("Token: ERROR\n");
+    } else if (token->type == TOKEN_INDENT) {
+        printf("Token: INDENT\n");
+    } else if (token->type == TOKEN_DEDENT) {
+        printf("Token: DEDENT\n");
+    } else if (token->type == TOKEN_NEWLINE) {
+        printf("Token: NEWLINE\n");
     } else {
         printf("Token: Type=%d, Value=%s\n", token->type, token->value);
     }
@@ -273,4 +322,97 @@ void free_token(Token* token) {
         free(token->value);
         token->value = NULL;
     }
+}
+
+int lexer_calculate_indentation(Lexer* lexer) {
+    int indent_level = 0;
+    int saved_position = lexer->position;
+    int saved_column = lexer->column;
+    char saved_char = lexer->current_char;
+    
+    // Count spaces and tabs at the beginning of the line
+    while (lexer->current_char == ' ' || lexer->current_char == '\t') {
+        if (lexer->current_char == ' ') {
+            indent_level++;
+        } else if (lexer->current_char == '\t') {
+            indent_level += 4; // Treat tab as 4 spaces
+        }
+        lexer_advance(lexer);
+    }
+    
+    // If we hit a newline or comment, this is an empty/comment line - ignore for indentation
+    if (lexer->current_char == '\n' || lexer->current_char == '\0' || 
+        (lexer->current_char == '/' && lexer_peek(lexer) == '/')) {
+        // Restore position and return -1 to indicate this line should be ignored
+        lexer->position = saved_position;
+        lexer->column = saved_column;
+        lexer->current_char = saved_char;
+        return -1;
+    }
+    
+    return indent_level;
+}
+
+void lexer_push_indent(Lexer* lexer, int level) {
+    if (lexer->indent_stack_size < MAX_INDENT_LEVELS) {
+        lexer->indent_stack[lexer->indent_stack_size] = level;
+        lexer->indent_stack_size++;
+    } else {
+        fprintf(stderr, "Error: Maximum indentation depth exceeded\n");
+    }
+}
+
+int lexer_pop_indent(Lexer* lexer) {
+    if (lexer->indent_stack_size > 1) {
+        lexer->indent_stack_size--;
+        return lexer->indent_stack[lexer->indent_stack_size];
+    }
+    return 0; // Base level
+}
+
+Token lexer_handle_indentation(Lexer* lexer) {
+    // Calculate indentation level for this line
+    int indent_level = lexer_calculate_indentation(lexer);
+    
+    // If this is an empty line or comment line, skip indentation processing
+    if (indent_level == -1) {
+        lexer->at_line_start = false;
+        return lexer_next_token(lexer); // Continue with normal tokenization
+    }
+    
+    int current_level = lexer->indent_stack[lexer->indent_stack_size - 1];
+    
+    if (indent_level > current_level) {
+        // Increased indentation - emit INDENT
+        lexer_push_indent(lexer, indent_level);
+        lexer->at_line_start = false;
+        return (Token){TOKEN_INDENT, NULL, lexer->line, lexer->column};
+    } else if (indent_level < current_level) {
+        // Decreased indentation - emit DEDENT(s)
+        lexer->dedent_count = 0;
+        
+        // Count how many levels we need to dedent
+        while (lexer->indent_stack_size > 1 && 
+               lexer->indent_stack[lexer->indent_stack_size - 1] > indent_level) {
+            lexer_pop_indent(lexer);
+            lexer->dedent_count++;
+        }
+        
+        // Check if we landed on a valid indentation level
+        if (lexer->indent_stack[lexer->indent_stack_size - 1] != indent_level) {
+            fprintf(stderr, "Error: Invalid indentation level at line %d\n", lexer->line);
+            return (Token){TOKEN_ERROR, NULL, lexer->line, lexer->column};
+        }
+        
+        if (lexer->dedent_count > 0) {
+            lexer->pending_dedents = true;
+            lexer->dedent_count--; // We'll return the first DEDENT now
+            lexer->at_line_start = false;
+            return (Token){TOKEN_DEDENT, NULL, lexer->line, lexer->column};
+        }
+    }
+    
+    // Same indentation level - continue with normal tokenization
+    lexer->at_line_start = false;
+    return lexer_next_token(lexer);
 }

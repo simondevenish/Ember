@@ -705,6 +705,8 @@ int vm_run(VM* vm) {
             case OP_LOAD_VAR: instruction_name = "OP_LOAD_VAR"; break;
             case OP_STORE_VAR: instruction_name = "OP_STORE_VAR"; break;
             case OP_ADD: instruction_name = "OP_ADD"; break;
+            case OP_AND: instruction_name = "OP_AND"; break;
+            case OP_OR: instruction_name = "OP_OR"; break;
             case OP_NEW_OBJECT: instruction_name = "OP_NEW_OBJECT"; break;
             case OP_GET_PROPERTY: instruction_name = "OP_GET_PROPERTY"; break;
             case OP_SET_PROPERTY: instruction_name = "OP_SET_PROPERTY"; break;
@@ -994,6 +996,82 @@ int vm_run(VM* vm) {
                     result.boolean_value = !truthy;
                     vm_push(vm, result);
                 }
+                break;
+            }
+
+            case OP_AND: {
+                // Logical AND (&&)
+                RuntimeValue b = vm_pop(vm);
+                RuntimeValue a = vm_pop(vm);
+                RuntimeValue result;
+                result.type = RUNTIME_VALUE_BOOLEAN;
+                
+                // Convert both operands to boolean
+                bool a_truthy = false;
+                bool b_truthy = false;
+                
+                // Convert a to boolean
+                if (a.type == RUNTIME_VALUE_BOOLEAN) {
+                    a_truthy = a.boolean_value;
+                } else if (a.type == RUNTIME_VALUE_NUMBER) {
+                    a_truthy = (a.number_value != 0);
+                } else if (a.type == RUNTIME_VALUE_STRING) {
+                    a_truthy = (a.string_value && a.string_value[0] != '\0');
+                } else if (a.type == RUNTIME_VALUE_NULL) {
+                    a_truthy = false;
+                }
+                
+                // Convert b to boolean
+                if (b.type == RUNTIME_VALUE_BOOLEAN) {
+                    b_truthy = b.boolean_value;
+                } else if (b.type == RUNTIME_VALUE_NUMBER) {
+                    b_truthy = (b.number_value != 0);
+                } else if (b.type == RUNTIME_VALUE_STRING) {
+                    b_truthy = (b.string_value && b.string_value[0] != '\0');
+                } else if (b.type == RUNTIME_VALUE_NULL) {
+                    b_truthy = false;
+                }
+                
+                result.boolean_value = a_truthy && b_truthy;
+                vm_push(vm, result);
+                break;
+            }
+
+            case OP_OR: {
+                // Logical OR (||)
+                RuntimeValue b = vm_pop(vm);
+                RuntimeValue a = vm_pop(vm);
+                RuntimeValue result;
+                result.type = RUNTIME_VALUE_BOOLEAN;
+                
+                // Convert both operands to boolean
+                bool a_truthy = false;
+                bool b_truthy = false;
+                
+                // Convert a to boolean
+                if (a.type == RUNTIME_VALUE_BOOLEAN) {
+                    a_truthy = a.boolean_value;
+                } else if (a.type == RUNTIME_VALUE_NUMBER) {
+                    a_truthy = (a.number_value != 0);
+                } else if (a.type == RUNTIME_VALUE_STRING) {
+                    a_truthy = (a.string_value && a.string_value[0] != '\0');
+                } else if (a.type == RUNTIME_VALUE_NULL) {
+                    a_truthy = false;
+                }
+                
+                // Convert b to boolean
+                if (b.type == RUNTIME_VALUE_BOOLEAN) {
+                    b_truthy = b.boolean_value;
+                } else if (b.type == RUNTIME_VALUE_NUMBER) {
+                    b_truthy = (b.number_value != 0);
+                } else if (b.type == RUNTIME_VALUE_STRING) {
+                    b_truthy = (b.string_value && b.string_value[0] != '\0');
+                } else if (b.type == RUNTIME_VALUE_NULL) {
+                    b_truthy = false;
+                }
+                
+                result.boolean_value = a_truthy || b_truthy;
+                vm_push(vm, result);
                 break;
             }
 

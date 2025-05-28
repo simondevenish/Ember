@@ -1,0 +1,14 @@
+// Simple function test
+function add(a, b) {
+    print("Adding " + a + " and " + b);
+    var result = a + b;
+    print("Result: " + result);
+}
+
+function greet(name, greeting) {
+    print(greeting + ", " + name + "!");
+}
+
+add(5, 3);
+greet("Alice", "Hello");
+greet("Bob", "Hi"); 

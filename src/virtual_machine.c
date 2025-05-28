@@ -119,6 +119,29 @@ VM* vm_create(BytecodeChunk* chunk) {
         vm->stack[i].type = RUNTIME_VALUE_NULL;
     }
 
+    // Initialize function storage
+    vm->function_capacity = 32;
+    vm->function_count = 0;
+    vm->functions = (VMFunction*)malloc(sizeof(VMFunction) * vm->function_capacity);
+    if (!vm->functions) {
+        fprintf(stderr, "Error: Memory allocation failed for VM functions.\n");
+        free(vm->stack);
+        free(vm);
+        return NULL;
+    }
+
+    // Initialize call frame storage
+    vm->frame_capacity = 64;
+    vm->frame_count = 0;
+    vm->call_frames = (CallFrame*)malloc(sizeof(CallFrame) * vm->frame_capacity);
+    if (!vm->call_frames) {
+        fprintf(stderr, "Error: Memory allocation failed for VM call frames.\n");
+        free(vm->functions);
+        free(vm->stack);
+        free(vm);
+        return NULL;
+    }
+
     return vm;
 }
 
@@ -128,6 +151,26 @@ void vm_free(VM* vm) {
         // Free each stack element if needed
         free(vm->stack);
     }
+    
+    // Free function storage
+    if (vm->functions) {
+        for (int i = 0; i < vm->function_count; i++) {
+            free(vm->functions[i].name);
+            if (vm->functions[i].param_names) {
+                for (int j = 0; j < vm->functions[i].param_count; j++) {
+                    free(vm->functions[i].param_names[j]);
+                }
+                free(vm->functions[i].param_names);
+            }
+        }
+        free(vm->functions);
+    }
+    
+    // Free call frame storage
+    if (vm->call_frames) {
+        free(vm->call_frames);
+    }
+    
     free(vm);
 }
 
@@ -712,8 +755,8 @@ int vm_run(VM* vm) {
             }
 
             case OP_LOAD_VAR: {
-                // The next byte is the variable index
-                uint8_t varIndex = *vm->ip++;
+                // The next two bytes are the variable index (16-bit, big-endian)
+                uint16_t varIndex = (uint16_t)(((*vm->ip++) << 8) | (*vm->ip++));
                 
                 // Print debug information about the variable
                 char label[40];
@@ -731,8 +774,8 @@ int vm_run(VM* vm) {
             }
 
             case OP_STORE_VAR: {
-                // The next byte is the variable index
-                uint8_t varIndex = *vm->ip++;
+                // The next two bytes are the variable index (16-bit, big-endian)
+                uint16_t varIndex = (uint16_t)(((*vm->ip++) << 8) | (*vm->ip++));
                 
                 // Pop top of stack
                 RuntimeValue value = vm_pop(vm);
@@ -1044,24 +1087,99 @@ int vm_run(VM* vm) {
                Functions & Return
                ----------------------------- */
             case OP_CALL: {
-                // For a minimal pass, handle built-in calls or do placeholders
                 // Byte 1: function index, Byte 2: argCount
                 uint8_t funcIndex = *vm->ip++;
                 uint8_t argCount  = *vm->ip++;
                 
-                // If we have user-defined functions with real call frames, we would implement them here.
-                // For now, just do nothing or handle built-ins.
-
-                // e.g. no-op placeholder
-                (void)funcIndex;
-                (void)argCount;
+                printf("VM DEBUG: OP_CALL funcIndex=%d, argCount=%d\n", funcIndex, argCount);
+                
+                // For user-defined functions, look up the function start IP
+                // The funcIndex should correspond to a constant that contains the start IP
+                if (funcIndex >= vm->chunk->constants_count) {
+                    fprintf(stderr, "VM Error: Invalid function index %d\n", funcIndex);
+                    return 1;
+                }
+                
+                // Get the function start IP from the constants table
+                RuntimeValue funcInfo = vm->chunk->constants[funcIndex];
+                if (funcInfo.type != RUNTIME_VALUE_NUMBER) {
+                    fprintf(stderr, "VM Error: Function info is not a number\n");
+                    return 1;
+                }
+                
+                int functionStartIP = (int)funcInfo.number_value;
+                printf("VM DEBUG: Calling user-defined function at IP %d\n", functionStartIP);
+                
+                // Save current IP for return
+                uint8_t* returnIP = vm->ip;
+                
+                // Pop arguments and store them as local variables
+                RuntimeValue* args = malloc(argCount * sizeof(RuntimeValue));
+                for (int i = argCount - 1; i >= 0; i--) {
+                    args[i] = vm_pop(vm);
+                }
+                
+                // Store arguments in "local" variable slots (using high indices)
+                for (int i = 0; i < argCount; i++) {
+                    int localVarIndex = 256 + i; // Use high indices for locals
+                    if (localVarIndex < 512) { // Ensure we don't overflow
+                        g_globals[localVarIndex] = args[i];
+                        printf("VM DEBUG: Stored argument %d at local index %d\n", i, localVarIndex);
+                        if (args[i].type == RUNTIME_VALUE_STRING) {
+                            printf("VM DEBUG: Argument %d value: '%s'\n", i, args[i].string_value);
+                        }
+                    }
+                }
+                
+                free(args);
+                
+                // Jump to function start
+                vm->ip = vm->chunk->code + functionStartIP;
+                
+                // Store return IP as a special marker on the stack
+                RuntimeValue returnMarker;
+                returnMarker.type = RUNTIME_VALUE_NUMBER;
+                returnMarker.number_value = (double)(returnIP - vm->chunk->code);
+                vm_push(vm, returnMarker);
+                
+                printf("VM DEBUG: Pushed return marker for IP offset %d\n", (int)(returnIP - vm->chunk->code));
+                
                 break;
             }
 
             case OP_RETURN: {
-                // Typically we would pop a return value, handle call frames, etc.
-                // For now, let's just return success from vm_run.
-                return 0;
+                // For our simple function call implementation, we need to:
+                // 1. Pop the return IP marker from the stack
+                // 2. Restore the instruction pointer
+                // 3. Continue execution
+                
+                printf("VM DEBUG: OP_RETURN - returning from function\n");
+                
+                // Check if we have a return marker on the stack
+                if (vm->stack_top <= vm->stack) {
+                    // No return marker, this is the end of the main program
+                    printf("VM DEBUG: End of main program\n");
+                    return 0;
+                }
+                
+                // Look for the return marker (we pushed it as a number)
+                // In a proper implementation, we'd have a call stack
+                // For now, let's assume the return marker is on the stack
+                RuntimeValue returnMarker = vm_pop(vm);
+                
+                if (returnMarker.type == RUNTIME_VALUE_NUMBER) {
+                    // Restore the instruction pointer
+                    int returnOffset = (int)returnMarker.number_value;
+                    vm->ip = vm->chunk->code + returnOffset;
+                    printf("VM DEBUG: Returning to IP offset %d\n", returnOffset);
+                } else {
+                    // This wasn't a return marker, put it back and end execution
+                    vm_push(vm, returnMarker);
+                    printf("VM DEBUG: No return marker found, ending execution\n");
+                    return 0;
+                }
+                
+                break;
             }
 
             /* -----------------------------
@@ -1426,4 +1544,75 @@ int vm_run(VM* vm) {
             }
         } // end switch
     } // end for
+}
+
+/* ----------------
+   Function Management
+   ---------------- */
+
+int vm_add_function(VM* vm, const char* name, int start_ip, int param_count, char** param_names) {
+    if (!vm || !name) return -1;
+    
+    // Ensure capacity
+    if (vm->function_count >= vm->function_capacity) {
+        vm->function_capacity *= 2;
+        vm->functions = (VMFunction*)realloc(vm->functions, sizeof(VMFunction) * vm->function_capacity);
+        if (!vm->functions) {
+            fprintf(stderr, "VM Error: Failed to reallocate function storage.\n");
+            return -1;
+        }
+    }
+    
+    VMFunction* func = &vm->functions[vm->function_count];
+    func->name = strdup(name);
+    func->start_ip = start_ip;
+    func->param_count = param_count;
+    
+    // Copy parameter names
+    if (param_count > 0 && param_names) {
+        func->param_names = (char**)malloc(sizeof(char*) * param_count);
+        for (int i = 0; i < param_count; i++) {
+            func->param_names[i] = strdup(param_names[i]);
+        }
+    } else {
+        func->param_names = NULL;
+    }
+    
+    return vm->function_count++;
+}
+
+VMFunction* vm_find_function(VM* vm, const char* name) {
+    if (!vm || !name) return NULL;
+    
+    for (int i = 0; i < vm->function_count; i++) {
+        if (strcmp(vm->functions[i].name, name) == 0) {
+            return &vm->functions[i];
+        }
+    }
+    return NULL;
+}
+
+void vm_push_frame(VM* vm, VMFunction* function, uint8_t* return_ip) {
+    if (!vm || !function) return;
+    
+    // Ensure capacity
+    if (vm->frame_count >= vm->frame_capacity) {
+        vm->frame_capacity *= 2;
+        vm->call_frames = (CallFrame*)realloc(vm->call_frames, sizeof(CallFrame) * vm->frame_capacity);
+        if (!vm->call_frames) {
+            fprintf(stderr, "VM Error: Failed to reallocate call frame storage.\n");
+            return;
+        }
+    }
+    
+    CallFrame* frame = &vm->call_frames[vm->frame_count++];
+    frame->function = function;
+    frame->return_ip = return_ip;
+    frame->stack_base = vm->stack_top - vm->stack;
+}
+
+CallFrame* vm_pop_frame(VM* vm) {
+    if (!vm || vm->frame_count <= 0) return NULL;
+    
+    return &vm->call_frames[--vm->frame_count];
 }

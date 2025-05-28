@@ -100,6 +100,25 @@ typedef struct {
 } BytecodeChunk;
 
 /**
+ * @brief A structure representing a function in the VM.
+ */
+typedef struct {
+    char* name;           ///< Function name
+    int start_ip;         ///< Starting instruction pointer for the function
+    int param_count;      ///< Number of parameters
+    char** param_names;   ///< Parameter names
+} VMFunction;
+
+/**
+ * @brief A structure representing a call frame for function calls.
+ */
+typedef struct {
+    VMFunction* function; ///< The function being called
+    uint8_t* return_ip;   ///< Where to return after the function call
+    int stack_base;       ///< Base of the stack frame for local variables
+} CallFrame;
+
+/**
  * @brief A structure representing the VM state.
  *
  * For a stack-based VM:
@@ -115,6 +134,15 @@ typedef struct {
     RuntimeValue* stack;  ///< The VM's operand stack
     RuntimeValue* stack_top; ///< Points to the next free slot
     int stack_capacity;   ///< Size of `stack`
+    
+    // Function call support
+    VMFunction* functions; ///< Array of defined functions
+    int function_count;    ///< Number of functions
+    int function_capacity; ///< Capacity of functions array
+    
+    CallFrame* call_frames; ///< Call stack for function calls
+    int frame_count;        ///< Number of active call frames
+    int frame_capacity;     ///< Capacity of call frames array
     
     // Potentially a call stack for function calls, environments, etc.
     // Environment* global_env; // Bridging to runtime environment
@@ -190,5 +218,43 @@ void vm_push(VM* vm, RuntimeValue value);
  * @return RuntimeValue The popped value.
  */
 RuntimeValue vm_pop(VM* vm);
+
+/**
+ * @brief Add a function definition to the VM.
+ *
+ * @param vm The VM instance.
+ * @param name The function name.
+ * @param start_ip The starting instruction pointer.
+ * @param param_count The number of parameters.
+ * @param param_names The parameter names.
+ * @return int The function index.
+ */
+int vm_add_function(VM* vm, const char* name, int start_ip, int param_count, char** param_names);
+
+/**
+ * @brief Find a function by name.
+ *
+ * @param vm The VM instance.
+ * @param name The function name.
+ * @return VMFunction* The function, or NULL if not found.
+ */
+VMFunction* vm_find_function(VM* vm, const char* name);
+
+/**
+ * @brief Push a call frame onto the call stack.
+ *
+ * @param vm The VM instance.
+ * @param function The function being called.
+ * @param return_ip Where to return after the call.
+ */
+void vm_push_frame(VM* vm, VMFunction* function, uint8_t* return_ip);
+
+/**
+ * @brief Pop a call frame from the call stack.
+ *
+ * @param vm The VM instance.
+ * @return CallFrame* The popped frame.
+ */
+CallFrame* vm_pop_frame(VM* vm);
 
 #endif // VIRTUAL_MACHINE_H

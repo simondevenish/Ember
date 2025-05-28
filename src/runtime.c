@@ -104,8 +104,44 @@ RuntimeValue runtime_value_copy(const RuntimeValue* value) {
             }
             break;
         case RUNTIME_VALUE_FUNCTION:
-            // For user-defined functions, we assume the function definition is shared
-            // If you need to deep copy functions, implement it here
+            // For functions, we need to deep copy user-defined functions
+            if (value->function_value.function_type == FUNCTION_TYPE_USER) {
+                UserDefinedFunction* original = value->function_value.user_function;
+                if (original) {
+                    UserDefinedFunction* copy_func = malloc(sizeof(UserDefinedFunction));
+                    if (copy_func) {
+                        // Copy the name
+                        copy_func->name = original->name ? strdup(original->name) : NULL;
+                        
+                        // Copy parameter count
+                        copy_func->parameter_count = original->parameter_count;
+                        
+                        // Copy parameters array
+                        if (original->parameters && original->parameter_count > 0) {
+                            copy_func->parameters = malloc(sizeof(char*) * original->parameter_count);
+                            if (copy_func->parameters) {
+                                for (int i = 0; i < original->parameter_count; i++) {
+                                    copy_func->parameters[i] = original->parameters[i] ? strdup(original->parameters[i]) : NULL;
+                                }
+                            } else {
+                                copy_func->parameters = NULL;
+                                copy_func->parameter_count = 0;
+                            }
+                        } else {
+                            copy_func->parameters = NULL;
+                        }
+                        
+                        // Share the AST body (don't deep copy the AST)
+                        copy_func->body = original->body;
+                        
+                        copy.function_value.user_function = copy_func;
+                    } else {
+                        // Allocation failed, set to NULL
+                        copy.function_value.user_function = NULL;
+                    }
+                }
+            }
+            // For built-in functions, shallow copy is fine
             break;
         default:
             // Other types (number, boolean, null) don't require special handling

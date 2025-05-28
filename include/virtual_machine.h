@@ -197,6 +197,14 @@ VM* vm_create(BytecodeChunk* chunk);
 void vm_free(VM* vm);
 
 /**
+ * @brief Set the global environment that contains all built-in functions.
+ * This should be called once during VM initialization.
+ *
+ * @param global_env The global environment containing built-in functions.
+ */
+void vm_set_global_environment(Environment* global_env);
+
+/**
  * @brief Run the bytecode in the given VM until completion or error.
  *
  * @param vm The VM instance.

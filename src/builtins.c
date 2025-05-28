@@ -36,9 +36,12 @@ void builtins_register(Environment* env) {
     runtime_register_builtin(env, "replace", builtin_replace);
 
     // Register raylib builtins if installed
+    // Temporarily disabled to avoid linking issues
+    /*
     if (utils_is_package_installed("raylib")) {
         raylib_register_builtins(env);
     }
+    */
 }
 
 RuntimeValue builtin_floor(Environment* env, RuntimeValue* args, int arg_count) {
@@ -273,5 +276,22 @@ RuntimeValue builtin_replace(Environment* env, RuntimeValue* args, int arg_count
     strcpy(result_str + before_len + replace_len, pos + search_len);
 
     RuntimeValue result = { .type = RUNTIME_VALUE_STRING, .string_value = result_str };
+    return result;
+}
+
+RuntimeValue builtin_print(Environment* env, RuntimeValue* args, int arg_count) {
+    (void)env; // Unused
+    
+    for (int i = 0; i < arg_count; i++) {
+        char* str = runtime_value_to_string(&args[i]);
+        printf("%s", str);
+        if (i < arg_count - 1) {
+            printf(" "); // Add space between arguments
+        }
+        free(str);
+    }
+    printf("\n");
+    
+    RuntimeValue result = { .type = RUNTIME_VALUE_NULL };
     return result;
 }

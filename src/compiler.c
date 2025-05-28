@@ -322,21 +322,28 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             break;
         }
         case AST_METHOD_CALL: {
-            // obj.method(args) => compile obj, args, then OP_METHOD_CALL
+            // obj.method(args) => compile obj, duplicate it, get method property, compile args, then OP_CALL_METHOD
+            
+            // 1. Compile the object
             compile_expression(node->method_call.object, chunk, symtab);
             
-            // Compile arguments in reverse order
-            for (int i = node->method_call.argument_count - 1; i >= 0; i--) {
+            // 2. Duplicate the object (one copy for 'this', one for property access)
+            emit_byte(chunk, OP_DUP);
+            
+            // 3. Get the method property from the object (consumes one copy of the object)
+            RuntimeValue method_name_val;
+            method_name_val.type = RUNTIME_VALUE_STRING;
+            method_name_val.string_value = strdup(node->method_call.method);
+            emit_constant(chunk, method_name_val);
+            emit_byte(chunk, OP_GET_PROPERTY);
+            
+            // 4. Compile arguments
+            for (int i = 0; i < node->method_call.argument_count; i++) {
                 compile_expression(node->method_call.arguments[i], chunk, symtab);
             }
             
-            // Push method name as string constant
-            RuntimeValue method_val;
-            method_val.type = RUNTIME_VALUE_STRING;
-            method_val.string_value = strdup(node->method_call.method);
-            emit_constant(chunk, method_val);
-            
-            // Call method
+            // Stack is now: [object, method, arg1, arg2, ..., argN]
+            // 5. Call method with the object as 'this'
             emit_byte(chunk, OP_CALL_METHOD);
             emit_byte(chunk, (uint8_t)node->method_call.argument_count);
             break;

@@ -213,12 +213,14 @@ i: 0 to 3
 // -----------------------------------------------------------------------------
 // 10) Demonstrate table assignment
 // -----------------------------------------------------------------------------
-var dayInfo:
+var dayInfo = {
   weather: "sunny"
+}
 
-var secondDay:
-  weather: "rainy"
+var secondDay = {
+  weather: "rainy",
   event: "Found hidden treasure"
+}
 
 print("Day #1 => weather=" + dayInfo.weather)
 dayInfo = secondDay

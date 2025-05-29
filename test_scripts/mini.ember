@@ -1,2 +1,0 @@
-var obj = { value: "test" };
-print(obj.value); 

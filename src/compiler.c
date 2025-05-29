@@ -280,11 +280,12 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             emit_byte(chunk, OP_NEW_ARRAY);
             // Now stack has a new empty array
             for (int i = 0; i < count; i++) {
-                // push the array ref again
-                emit_byte(chunk, OP_DUP);
+                // No duplication needed! OP_ARRAY_PUSH pops the array and value,
+                // then pushes the updated array back, so the stack management is automatic
+                
                 // compile the element
                 compile_expression(node->array_literal.elements[i], chunk, symtab);
-                // OP_ARRAY_PUSH
+                // OP_ARRAY_PUSH pops [array, element] and pushes [updated_array]
                 emit_byte(chunk, OP_ARRAY_PUSH);
             }
             // The resulting array is on the stack top
@@ -334,14 +335,12 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
                 }
             }
 
-            // Then, add each regular property to the object
+            // Handle properties with proper stack management
+            // OP_SET_PROPERTY expects: [object, propName, value] and produces: [updatedObject]
             for (int i = 0; i < node->object_literal.property_count; i++) {
-                // Duplicate the object reference on the stack (for all properties except the last one)
-                // For the last property, we don't duplicate because OP_SET_PROPERTY will consume
-                // the object and push back the updated version
-                if (i < node->object_literal.property_count - 1) {
-                    emit_byte(chunk, OP_DUP);
-                }
+                // For all properties, we'll duplicate the object first, then add property
+                // This ensures the object reference is always available for the next property
+                emit_byte(chunk, OP_DUP);
                 
                 // Push property key (as string constant)
                 RuntimeValue key_val;
@@ -352,10 +351,14 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
                 // Evaluate the property value expression
                 compile_expression(node->object_literal.values[i], chunk, symtab);
                 
-                // Set property on object
+                // Set property on object: stack is [obj, obj, key, value] -> [obj, updatedObj]
                 emit_byte(chunk, OP_SET_PROPERTY);
-                // After OP_SET_PROPERTY: if we duplicated the object, stack has [originalObj, updatedObj]
-                // If we didn't duplicate (last property), stack has [updatedObj]
+                
+                // Now we have [originalObj, updatedObj] on stack
+                // We need to remove the original and keep the updated one
+                // Use OP_SWAP and OP_POP to clean up
+                emit_byte(chunk, OP_SWAP);  // [updatedObj, originalObj]
+                emit_byte(chunk, OP_POP);   // [updatedObj]
             }
             
             // The resulting object is on the stack top

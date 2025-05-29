@@ -864,14 +864,13 @@ RuntimeValue runtime_evaluate(Environment* env, ASTNode* node) {
                     runtime_set_variable(child_env, param_name, arg_value);
                 }
                 
-                // Execute the function body
-                runtime_execute_block(child_env, user_function->body);
-                
-                // For simplicity, methods return null (you can extend this to support return statements)
-                result.type = RUNTIME_VALUE_NULL;
+                // Execute the function body and capture the return value
+                RuntimeValue result = runtime_execute_block_with_return(child_env, user_function->body);
                 
                 // Free the child environment
                 runtime_free_environment(child_env);
+                
+                return result;
             }
             
             break;
@@ -895,6 +894,23 @@ void runtime_execute_block(Environment* env, ASTNode* block) {
         ASTNode* statement = block->block.statements[i];
         runtime_evaluate(env, statement);
     }
+}
+
+RuntimeValue runtime_execute_block_with_return(Environment* env, ASTNode* block) {
+    RuntimeValue result = {.type = RUNTIME_VALUE_NULL};
+    
+    if (!block || block->type != AST_BLOCK) {
+        fprintf(stderr, "Error: Invalid block node provided for execution.\n");
+        return result;
+    }
+
+    // Execute all statements and capture the value of the last one
+    for (int i = 0; i < block->block.statement_count; i++) {
+        ASTNode* statement = block->block.statements[i];
+        result = runtime_evaluate(env, statement);
+    }
+    
+    return result;
 }
 
 bool runtime_execute_file_in_environment(Environment* env, const char* filename) {
@@ -976,11 +992,8 @@ RuntimeValue runtime_execute_function_call(Environment* env, ASTNode* function_c
                 runtime_set_variable(child_env, param_name, arg_value);
             }
 
-            // Execute the function body
-            runtime_execute_block(child_env, user_function->body);
-
-            // For simplicity, functions return null (you can extend this to support return statements)
-            RuntimeValue result = { .type = RUNTIME_VALUE_NULL };
+            // Execute the function body and capture the return value
+            RuntimeValue result = runtime_execute_block_with_return(child_env, user_function->body);
 
             // Free the child environment
             runtime_free_environment(child_env);

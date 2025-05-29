@@ -1231,21 +1231,43 @@ int vm_run(VM* vm) {
 
             case OP_RETURN: {
                 // For our simple function call implementation, we need to:
-                // 1. Pop the return IP marker from the stack
-                // 2. Restore the instruction pointer
-                // 3. Continue execution
+                // 1. Check if there's a return value before the return marker
+                // 2. Pop the return IP marker from the stack
+                // 3. Restore the instruction pointer
+                // 4. Push the return value back (if any)
                 
                 printf("VM DEBUG: OP_RETURN - stack size: %ld\n", vm->stack_top - vm->stack);
                 
                 // Check if we have anything on the stack
                 if (vm->stack_top <= vm->stack) {
                     // No values on stack - this could be end of main program or empty function return
-                    // We should only end if we're truly at the end of the bytecode
                     printf("VM DEBUG: Empty stack, ending program\n");
                     return 0;
                 }
                 
-                // Look for the return marker (we pushed it as a number)
+                // Check if there are at least 2 values on the stack (return value + return marker)
+                if (vm->stack_top - vm->stack >= 2) {
+                    // Look at the top two values to see if we have a return value before the marker
+                    RuntimeValue topValue = vm_peek(vm, 0);      // Value at top
+                    RuntimeValue secondValue = vm_peek(vm, 1);   // Value below top
+                    
+                    if (secondValue.type == RUNTIME_VALUE_NUMBER && topValue.type != RUNTIME_VALUE_NUMBER) {
+                        // We have a return value on top and a return marker below it
+                        RuntimeValue returnValue = vm_pop(vm);
+                        RuntimeValue returnMarker = vm_pop(vm);
+                        
+                        int returnOffset = (int)returnMarker.number_value;
+                        vm->ip = vm->chunk->code + returnOffset;
+                        
+                        // Push the return value back onto the stack
+                        vm_push(vm, returnValue);
+                        
+                        printf("VM DEBUG: Returning to IP offset %d with return value\n", returnOffset);
+                        break;
+                    }
+                }
+                
+                // Single value on stack - check if it's a return marker
                 RuntimeValue returnMarker = vm_pop(vm);
                 printf("VM DEBUG: Popped value type: %d\n", returnMarker.type);
                 
@@ -1253,13 +1275,17 @@ int vm_run(VM* vm) {
                     // This is a return marker - restore the instruction pointer
                     int returnOffset = (int)returnMarker.number_value;
                     vm->ip = vm->chunk->code + returnOffset;
-                    printf("VM DEBUG: Returning to IP offset %d\n", returnOffset);
+                    
+                    // Push null as the return value (function returned nothing)
+                    RuntimeValue nullReturnValue = {.type = RUNTIME_VALUE_NULL};
+                    vm_push(vm, nullReturnValue);
+                    
+                    printf("VM DEBUG: Returning to IP offset %d with null return value\n", returnOffset);
                 } else {
                     // This wasn't a return marker, it's some other value
                     // Put it back on the stack and continue execution
                     vm_push(vm, returnMarker);
                     printf("VM DEBUG: Not a return marker, continuing execution\n");
-                    // Don't return - just continue execution
                 }
                 
                 break;
@@ -1569,11 +1595,12 @@ int vm_run(VM* vm) {
                     return 1;
                 }
                 
+                RuntimeValue result = {.type = RUNTIME_VALUE_NULL}; // Default return value
+                
                 // Call the function with 'this' as the first argument
                 if (methodVal.function_value.function_type == FUNCTION_TYPE_BUILTIN) {
                     // Built-in function
-                    RuntimeValue result = methodVal.function_value.builtin_function(NULL, args, argCount + 1);
-                    vm_push(vm, result);
+                    result = methodVal.function_value.builtin_function(NULL, args, argCount + 1);
                 } else {
                     // User-defined function - we need to execute it with proper 'this' context
                     UserDefinedFunction* user_func = methodVal.function_value.user_function;
@@ -1594,7 +1621,6 @@ int vm_run(VM* vm) {
                     }
                     
                     // Create a temporary environment for the function call
-                    // We'll use the runtime system to execute the function body
                     Environment* temp_env = runtime_create_environment();
                     if (!temp_env) {
                         fprintf(stderr, "VM Error: Failed to create environment for method call.\n");
@@ -1615,44 +1641,34 @@ int vm_run(VM* vm) {
                         }
                     }
                     
-                    // Execute the function body using the runtime system
-                    runtime_execute_block(temp_env, user_func->body);
+                    // Execute the function body and capture the return value
+                    result = runtime_execute_block_with_return(temp_env, user_func->body);
+                    
+                    // No need to check for special return variable since we have the actual return value
                     
                     // Check if 'this' was modified and update the original object
                     RuntimeValue* modified_this = runtime_get_variable(temp_env, "this");
                     if (modified_this && modified_this->type == RUNTIME_VALUE_OBJECT) {
-                        // Update the original object on the stack with the modified 'this'
-                        // The original object is still on the stack (we duplicated it earlier)
-                        RuntimeValue* original_obj = vm->stack_top - 1;
-                        if (original_obj->type == RUNTIME_VALUE_OBJECT) {
-                            // Free the old object and replace with the modified one
-                            runtime_free_value(original_obj);
-                            *original_obj = runtime_value_copy(modified_this);
-                            
-                            // Also need to update any global variables that reference this object
-                            // This is a simplified approach - in a full implementation we'd need
-                            // proper reference tracking
-                            for (int i = 0; i < 256; i++) {
-                                if (g_globals[i].type == RUNTIME_VALUE_OBJECT) {
-                                    // Simple heuristic: if the object has the same number of properties,
-                                    // it might be the same object (this is imperfect but works for our test)
-                                    if (g_globals[i].object_value.count == thisObj.object_value.count) {
-                                        runtime_free_value(&g_globals[i]);
-                                        g_globals[i] = runtime_value_copy(modified_this);
-                                        break;
-                                    }
+                        // Update any global variables that reference this object
+                        for (int i = 0; i < 256; i++) {
+                            if (g_globals[i].type == RUNTIME_VALUE_OBJECT) {
+                                // Simple heuristic: if the object has the same number of properties,
+                                // it might be the same object (this is imperfect but works for our test)
+                                if (g_globals[i].object_value.count == thisObj.object_value.count) {
+                                    runtime_free_value(&g_globals[i]);
+                                    g_globals[i] = runtime_value_copy(modified_this);
+                                    break;
                                 }
                             }
                         }
                     }
                     
-                    // For now, methods return null (we can extend this later for return statements)
-                    RuntimeValue result = {.type = RUNTIME_VALUE_NULL};
-                    vm_push(vm, result);
-                    
                     // Clean up the temporary environment
                     runtime_free_environment(temp_env);
                 }
+                
+                // Push the actual return value (instead of always null)
+                vm_push(vm, result);
                 
                 free(args);
                 break;

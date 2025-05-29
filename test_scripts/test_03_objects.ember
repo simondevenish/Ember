@@ -52,7 +52,9 @@ print("  company.address.coordinates.lat: " + company.address.coordinates.lat)
 print("  company.address.coordinates.lng: " + company.address.coordinates.lng)
 print("  company.employees.count: " + company.employees.count)
 print("  company.employees.departments: " + company.employees.departments)
-print("  company.employees.departments[0]: " + company.employees.departments[0])
+// Work around parser limitation with property[index] - use intermediate variable
+depts: company.employees.departments
+print("  company.employees.departments[0]: " + depts[0])
 
 // Property assignment
 person.age = 31

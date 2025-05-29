@@ -154,6 +154,15 @@ RuntimeValue* runtime_get_variable(Environment* env, const char* name);
 RuntimeValue runtime_evaluate(Environment* env, ASTNode* node);
 
 /**
+ * @brief Execute a block of statements (AST_BLOCK) and return the value of the last expression.
+ * 
+ * @param env Pointer to the environment.
+ * @param block Pointer to the block AST node.
+ * @return RuntimeValue The value of the last expression in the block.
+ */
+RuntimeValue runtime_execute_block_with_return(Environment* env, ASTNode* block);
+
+/**
  * @brief Execute a block of statements (AST_BLOCK).
  * 
  * @param env Pointer to the environment.

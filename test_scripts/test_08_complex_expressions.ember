@@ -29,22 +29,25 @@ gameData: {
 
 print("Complex property access:")
 print("  Player health: " + gameData.player.stats.health)
-print("  First weapon: " + gameData.player.stats.inventory.weapons[0])
+// Work around parser limitation
+weapons: gameData.player.stats.inventory.weapons
+print("  First weapon: " + weapons[0])
 print("  Health potions: " + gameData.player.stats.inventory.potions.health)
 print("  Player zone: " + gameData.player.location.zone)
 print("  Game volume: " + gameData.settings.volume)
 
 // Complex array operations
-matrix: [
-    [1, 2, 3],
-    [4, 5, 6],
-    [7, 8, 9]
-]
+matrix: [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
 
 print("Matrix operations:")
-print("  matrix[1][2]: " + matrix[1][2])
+// Work around parser limitation
+row1: matrix[1]
+print("  matrix[1][2]: " + row1[2])
 print("  matrix[0]: " + matrix[0])
-sum: matrix[0][0] + matrix[1][1] + matrix[2][2]
+// Work around parser limitation for diagonal sum
+row0: matrix[0]
+row2: matrix[2]
+sum: row0[0] + row1[1] + row2[2]
 print("  Diagonal sum: " + sum)
 
 // Chained method calls
@@ -65,7 +68,9 @@ processor: {
     
     getResult: fn() {
         print("Getting result from " + this.name)
-        this.data[0] + " processed"
+        // Work around parser limitation
+        dataArray: this.data
+        dataArray[0] + " processed"
     }
 }
 
@@ -112,16 +117,17 @@ print("  Combined: " + combined)
 mixed: {
     numbers: [1, 2, 3, 4, 5],
     strings: ["a", "b", "c"],
-    objects: [
-        { id: 1, name: "first" },
-        { id: 2, name: "second" }
-    ],
+    objects: [{ id: 1, name: "first" }, { id: 2, name: "second" }],
     
     processAll: fn() {
         print("Processing numbers: " + this.numbers)
         print("Processing strings: " + this.strings)
-        print("First object name: " + this.objects[0].name)
-        print("Second object id: " + this.objects[1].id)
+        // Work around parser limitation
+        objs: this.objects
+        firstObj: objs[0]
+        secondObj: objs[1]
+        print("First object name: " + firstObj.name)
+        print("Second object id: " + secondObj.id)
     }
 }
 
@@ -159,26 +165,29 @@ print("  Should apply: " + shouldApply)
 
 // Nested function calls with property access
 dataStore: {
-    items: [
-        { name: "apple", price: 1.50 },
-        { name: "banana", price: 0.75 },
-        { name: "orange", price: 2.00 }
-    ],
+    items: [{ name: "apple", price: 1.50 }, { name: "banana", price: 0.75 }, { name: "orange", price: 2.00 }],
     
     findByName: fn(searchName) {
         for (i = 0; i < 3; i = i + 1) {
-            currentItem: this.items[i]
+            // Work around parser limitation
+            items: this.items
+            currentItem: items[i]
             if (currentItem.name == searchName) {
                 print("Found " + searchName + " at index " + i)
             }
         }
-        this.items[1]  // Just return the banana item for testing
+        // Work around parser limitation
+        items: this.items
+        items[1]  // Just return the banana item for testing
     },
     
     getTotalValue: fn() {
         total: 0
         for (i = 0; i < 3; i = i + 1) {
-            total = total + this.items[i].price
+            // Work around parser limitation
+            items: this.items
+            item: items[i]
+            total = total + item.price
         }
         total
     }

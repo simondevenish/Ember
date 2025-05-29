@@ -1,5 +1,0 @@
-// Absolutely minimal property test
-var obj = {};
-obj.x = "test";
-print("obj.x = " + obj.x);
- 

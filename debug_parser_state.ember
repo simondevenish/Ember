@@ -1,0 +1,9 @@
+// Debug parser state
+var MixinA = {
+    prop1: "value1"
+}
+
+var obj = {
+    :[MixinA],
+    name: "test"
+} 

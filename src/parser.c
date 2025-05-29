@@ -2242,12 +2242,20 @@ ASTNode* parse_object_literal(Parser* parser) {
         return object_node;
     }
 
+    // Skip any newlines, indents, or dedents before checking for mixins
+    while (parser->current_token.type == TOKEN_NEWLINE || 
+           parser->current_token.type == TOKEN_INDENT || 
+           parser->current_token.type == TOKEN_DEDENT) {
+        parser_advance(parser);
+    }
+
     // Check for mixin syntax: :[MixinName1, MixinName2]
     if (parser->current_token.type == TOKEN_PUNCTUATION && 
         strcmp(parser->current_token.value, ":") == 0) {
         
         // Look ahead to see if this is a mixin declaration
         Token next_token = peek_token(parser);
+        
         if (next_token.type == TOKEN_PUNCTUATION && 
             strcmp(next_token.value, "[") == 0) {
             
@@ -2314,6 +2322,13 @@ ASTNode* parse_object_literal(Parser* parser) {
                 }
             } while (1);
             
+            // Skip any newlines, indents, or dedents before checking for end of object
+            while (parser->current_token.type == TOKEN_NEWLINE || 
+                   parser->current_token.type == TOKEN_INDENT || 
+                   parser->current_token.type == TOKEN_DEDENT) {
+                parser_advance(parser);
+            }
+            
             // After parsing mixins, check if there are more properties
             if (parser->current_token.type == TOKEN_PUNCTUATION && 
                 strcmp(parser->current_token.value, "}") == 0) {
@@ -2341,7 +2356,24 @@ ASTNode* parse_object_literal(Parser* parser) {
                 return object_node;
             }
             
-            // There are more properties after mixins, continue parsing
+            // There are more properties after mixins - require a comma
+            if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                strcmp(parser->current_token.value, ",") == 0) {
+                parser_advance(parser); // Skip ','
+                
+                // Skip any newlines after the comma
+                while (parser->current_token.type == TOKEN_NEWLINE) {
+                    parser_advance(parser);
+                }
+            } else {
+                report_error(parser, "Expected ',' after mixin declaration when properties follow");
+                // Clean up
+                for (int i = 0; i < mixin_count; i++) {
+                    free(mixins[i]);
+                }
+                free(mixins);
+                return NULL;
+            }
         }
     }
 
@@ -2371,6 +2403,11 @@ ASTNode* parse_object_literal(Parser* parser) {
             }
             free(keys);
             free(values);
+            // Also clean up mixins
+            for (int i = 0; i < mixin_count; i++) {
+                free(mixins[i]);
+            }
+            free(mixins);
             return NULL;
         }
 

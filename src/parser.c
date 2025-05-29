@@ -752,8 +752,10 @@ ASTNode* parse_expression(Parser* parser, int min_precedence) {
 }
 
 ASTNode* parse_statement(Parser* parser) {
-    // Skip any leading newlines
-    while (parser->current_token.type == TOKEN_NEWLINE) {
+    // Skip any leading newlines, indents, or dedents
+    while (parser->current_token.type == TOKEN_NEWLINE || 
+           parser->current_token.type == TOKEN_INDENT || 
+           parser->current_token.type == TOKEN_DEDENT) {
         parser_advance(parser);
     }
     
@@ -910,6 +912,20 @@ ASTNode* parse_block(Parser* parser) {
     // Parse statements until we encounter '}'
     while (parser->current_token.type != TOKEN_PUNCTUATION ||
            strcmp(parser->current_token.value, "}") != 0) {
+        
+        // Skip any newlines, indents, or dedents between statements
+        while (parser->current_token.type == TOKEN_NEWLINE || 
+               parser->current_token.type == TOKEN_INDENT || 
+               parser->current_token.type == TOKEN_DEDENT) {
+            parser_advance(parser);
+        }
+        
+        // Check if we found the closing brace after skipping whitespace
+        if (parser->current_token.type == TOKEN_PUNCTUATION &&
+            strcmp(parser->current_token.value, "}") == 0) {
+            break;
+        }
+        
         ASTNode* statement = parse_statement(parser);
         if (!statement) {
             // Handle parsing error within the block

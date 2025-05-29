@@ -1477,10 +1477,33 @@ int vm_run(VM* vm) {
                 vm_add_property(&objectCopy, propName.string_value, &value);
                 
                 // If this is a global variable, update it
+                // Use a more precise identification method to avoid corrupting unrelated objects
                 for (int i = 0; i < 256; i++) {
                     if (g_globals[i].type == RUNTIME_VALUE_OBJECT) {
-                        // Simple check to see if this might be our object
+                        // Check if this is the same object by comparing memory addresses
+                        // and doing a more thorough content comparison
+                        bool is_same_object = false;
+                        
+                        // First check: property count must match
                         if (g_globals[i].object_value.count == object.object_value.count) {
+                            // Second check: compare a few property names to ensure it's the same object
+                            // This prevents accidental matches between different objects with same property count
+                            bool properties_match = true;
+                            
+                            // If the object has properties, verify at least the first few match
+                            int properties_to_check = (object.object_value.count < 3) ? object.object_value.count : 3;
+                            for (int j = 0; j < properties_to_check; j++) {
+                                if (!object.object_value.keys[j] || !g_globals[i].object_value.keys[j] ||
+                                    strcmp(object.object_value.keys[j], g_globals[i].object_value.keys[j]) != 0) {
+                                    properties_match = false;
+                                    break;
+                                }
+                            }
+                            
+                            is_same_object = properties_match;
+                        }
+                        
+                        if (is_same_object) {
                             runtime_free_value(&g_globals[i]);
                             g_globals[i] = runtime_value_copy(&objectCopy);
                             break;
@@ -1546,8 +1569,30 @@ int vm_run(VM* vm) {
                 // If this is a global variable, update it too
                 for (int i = 0; i < 256; i++) {
                     if (g_globals[i].type == RUNTIME_VALUE_OBJECT) {
-                        // Simple check to see if this might be our object
+                        // Check if this is the same object by comparing memory addresses
+                        // and doing a more thorough content comparison
+                        bool is_same_object = false;
+                        
+                        // First check: property count must match
                         if (g_globals[i].object_value.count == obj.object_value.count) {
+                            // Second check: compare a few property names to ensure it's the same object
+                            // This prevents accidental matches between different objects with same property count
+                            bool properties_match = true;
+                            
+                            // If the object has properties, verify at least the first few match
+                            int properties_to_check = (obj.object_value.count < 3) ? obj.object_value.count : 3;
+                            for (int j = 0; j < properties_to_check; j++) {
+                                if (!obj.object_value.keys[j] || !g_globals[i].object_value.keys[j] ||
+                                    strcmp(obj.object_value.keys[j], g_globals[i].object_value.keys[j]) != 0) {
+                                    properties_match = false;
+                                    break;
+                                }
+                            }
+                            
+                            is_same_object = properties_match;
+                        }
+                        
+                        if (is_same_object) {
                             runtime_free_value(&g_globals[i]);
                             g_globals[i] = runtime_value_copy(&objCopy);
                             break;
@@ -1650,11 +1695,32 @@ int vm_run(VM* vm) {
                     RuntimeValue* modified_this = runtime_get_variable(temp_env, "this");
                     if (modified_this && modified_this->type == RUNTIME_VALUE_OBJECT) {
                         // Update any global variables that reference this object
+                        // Use a more precise identification method to avoid corrupting unrelated objects
                         for (int i = 0; i < 256; i++) {
                             if (g_globals[i].type == RUNTIME_VALUE_OBJECT) {
-                                // Simple heuristic: if the object has the same number of properties,
-                                // it might be the same object (this is imperfect but works for our test)
+                                // Check if this is the same object by doing a more thorough content comparison
+                                bool is_same_object = false;
+                                
+                                // First check: property count must match
                                 if (g_globals[i].object_value.count == thisObj.object_value.count) {
+                                    // Second check: compare a few property names to ensure it's the same object
+                                    // This prevents accidental matches between different objects with same property count
+                                    bool properties_match = true;
+                                    
+                                    // If the object has properties, verify at least the first few match
+                                    int properties_to_check = (thisObj.object_value.count < 3) ? thisObj.object_value.count : 3;
+                                    for (int j = 0; j < properties_to_check; j++) {
+                                        if (!thisObj.object_value.keys[j] || !g_globals[i].object_value.keys[j] ||
+                                            strcmp(thisObj.object_value.keys[j], g_globals[i].object_value.keys[j]) != 0) {
+                                            properties_match = false;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    is_same_object = properties_match;
+                                }
+                                
+                                if (is_same_object) {
                                     runtime_free_value(&g_globals[i]);
                                     g_globals[i] = runtime_value_copy(modified_this);
                                     break;

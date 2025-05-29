@@ -1,0 +1,38 @@
+// Phase 2: Naked Iterator Implementation Test
+// This test validates that naked iterators work correctly
+
+print("=== EmberScript Naked Iterator Test ===")
+
+// Test 1: Basic naked iterator
+print("\n1. Basic naked iterator (0..3):")
+i: 0..3
+  print("  Iteration i = " + i)
+
+// Test 2: Naked iterator with variables  
+print("\n2. Naked iterator with variables:")
+var start: 2
+var end: 5
+j: start..end
+  print("  Iteration j = " + j)
+
+// Test 3: Naked iterator with expressions
+print("\n3. Naked iterator with expressions:")
+k: (1 + 1)..(2 * 3)
+  print("  Iteration k = " + k)
+
+// Test 4: Multiple statements in body
+print("\n4. Multiple statements in iterator body:")
+n: 1..2
+  print("  Starting iteration n = " + n)
+  var squared: n * n
+  print("  n squared = " + squared)
+  print("  Ending iteration n = " + n)
+
+// Test 5: Iterator variable should be available after loop (final value)
+print("\n5. Iterator variable after loop:")
+m: 10..12
+  print("  Inside loop: m = " + m)
+print("After loop: m = " + m)
+
+print("\n=== All Naked Iterator Tests Complete! ===")
+print("Phase 2 (Naked Iterators) is ready for testing.") 

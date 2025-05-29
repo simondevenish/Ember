@@ -248,6 +248,14 @@ ASTNode* parse_colon_variable_declaration(Parser* parser);
 ASTNode* parse_implicit_variable_declaration(Parser* parser);
 
 /**
+ * @brief Parse a naked iterator (identifier: range followed by indented block).
+ * 
+ * @param parser The parser instance.
+ * @return ASTNode* The parsed naked iterator node.
+ */
+ASTNode* parse_naked_iterator(Parser* parser);
+
+/**
  * @brief Parse an anonymous block (e.g., a block of statements not tied to any specific construct).
  * 
  * @param parser The parser instance.

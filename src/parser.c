@@ -871,7 +871,11 @@ ASTNode* parse_statement(Parser* parser) {
         }
         // Check for function definition syntax: name: fn(params) { ... }
         else if (next_token.type == TOKEN_PUNCTUATION && strcmp(next_token.value, ":") == 0) {
-            // We need to look ahead further to see if this is 'fn' (function) or a value (implicit var)
+            // We need to look ahead further to see if this is:
+            // - 'fn' (function)
+            // - range expression followed by indented block (naked iterator)
+            // - value (implicit var)
+            
             // Save current state
             Lexer saved_lexer = *parser->lexer;
             Token saved_token = parser->current_token;
@@ -883,12 +887,52 @@ ASTNode* parse_statement(Parser* parser) {
             bool is_function = (parser->current_token.type == TOKEN_KEYWORD && 
                                strcmp(parser->current_token.value, "fn") == 0);
             
+            // Check for naked iterator pattern: identifier: range_expression followed by indented block
+            bool is_naked_iterator = false;
+            if (!is_function) {
+                // Try to determine if this could be a range expression
+                // Look for patterns like: number..number, identifier..identifier, etc.
+                // We'll do a simple heuristic: if we see a potential range expression followed by newline + indent
+                
+                // Parse ahead to see if we can find a range pattern
+                int lookahead_count = 0;
+                while (lookahead_count < 20 && parser->current_token.type != TOKEN_EOF) {
+                    if (parser->current_token.type == TOKEN_OPERATOR && 
+                        strcmp(parser->current_token.value, "..") == 0) {
+                        // Found range operator, continue looking for newline + indent
+                        parser_advance(parser);
+                        lookahead_count++;
+                        continue;
+                    } else if (parser->current_token.type == TOKEN_NEWLINE) {
+                        parser_advance(parser);
+                        lookahead_count++;
+                        // Check if next token is INDENT
+                        if (parser->current_token.type == TOKEN_INDENT) {
+                            is_naked_iterator = true;
+                            break;
+                        }
+                    } else if (parser->current_token.type == TOKEN_NUMBER || 
+                              parser->current_token.type == TOKEN_IDENTIFIER ||
+                              parser->current_token.type == TOKEN_PUNCTUATION ||
+                              parser->current_token.type == TOKEN_OPERATOR) {
+                        // Continue parsing potential range expression
+                        parser_advance(parser);
+                        lookahead_count++;
+                    } else {
+                        // Hit something unexpected, break
+                        break;
+                    }
+                }
+            }
+            
             // Restore parser state
             *parser->lexer = saved_lexer;
             parser->current_token = saved_token;
             
             if (is_function) {
                 return parse_function_definition(parser);
+            } else if (is_naked_iterator) {
+                return parse_naked_iterator(parser);
             } else {
                 return parse_implicit_variable_declaration(parser);
             }
@@ -1998,6 +2042,81 @@ ASTNode* parse_implicit_variable_declaration(Parser* parser) {
     consume_optional_semicolon(parser);
 
     return variable_decl_node;
+}
+
+ASTNode* parse_naked_iterator(Parser* parser) {
+    // Handle: identifier: range_expression followed by indented block
+    // Example: i: 0..5
+    //            print("Iteration " + i)
+    
+    // Ensure the current token is an identifier (loop variable)
+    if (parser->current_token.type != TOKEN_IDENTIFIER) {
+        report_error(parser, "Expected identifier for naked iterator variable");
+        return NULL;
+    }
+
+    // Store the iterator variable name
+    char* variable_name = strdup(parser->current_token.value);
+    if (!variable_name) {
+        report_error(parser, "Memory allocation failed for iterator variable name");
+        return NULL;
+    }
+    parser_advance(parser); // Skip the variable name
+
+    // Expect a colon ':'
+    if (parser->current_token.type != TOKEN_PUNCTUATION || 
+        strcmp(parser->current_token.value, ":") != 0) {
+        report_error(parser, "Expected ':' after iterator variable name");
+        free(variable_name);
+        return NULL;
+    }
+    parser_advance(parser); // Skip the ':'
+
+    // Parse the range expression
+    ASTNode* range_expr = parse_expression(parser, 0);
+    if (!range_expr) {
+        report_error(parser, "Failed to parse range expression for naked iterator");
+        free(variable_name);
+        return NULL;
+    }
+
+    // Verify that the expression is actually a range
+    if (range_expr->type != AST_RANGE) {
+        report_error(parser, "Expected range expression (e.g., 0..5) for naked iterator");
+        free(variable_name);
+        free_ast(range_expr);
+        return NULL;
+    }
+
+    // Skip any newlines after the range expression
+    while (parser->current_token.type == TOKEN_NEWLINE) {
+        parser_advance(parser);
+    }
+
+    // Parse the indented body
+    ASTNode* body = parse_indented_block(parser);
+    if (!body) {
+        report_error(parser, "Failed to parse indented body for naked iterator");
+        free(variable_name);
+        free_ast(range_expr);
+        return NULL;
+    }
+
+    // Create the naked iterator node
+    ASTNode* naked_iterator_node = create_ast_node(AST_NAKED_ITERATOR);
+    if (!naked_iterator_node) {
+        report_error(parser, "Memory allocation failed for naked iterator node");
+        free(variable_name);
+        free_ast(range_expr);
+        free_ast(body);
+        return NULL;
+    }
+
+    naked_iterator_node->naked_iterator.variable_name = variable_name;
+    naked_iterator_node->naked_iterator.range = range_expr;
+    naked_iterator_node->naked_iterator.body = body;
+
+    return naked_iterator_node;
 }
 
 ASTNode* parse_anonymous_block(Parser* parser) {

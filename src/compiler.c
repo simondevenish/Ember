@@ -875,6 +875,77 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             patch_jump(chunk, loopEndJump);
             break;
         }
+        case AST_NAKED_ITERATOR: {
+            // Naked iterator: var: start..end (body)
+            // Compile as: var = start; while (var <= end) { body; var++; }
+            
+            // 1. Get the range start and end values
+            ASTNode* range = node->naked_iterator.range;
+            char* var_name = node->naked_iterator.variable_name;
+            
+            // 2. Initialize the iterator variable to the start value
+            // var = range.start
+            compile_expression(range->range.start, chunk, symtab);
+            int varIndex = symbol_table_get_or_add(symtab, var_name, false);
+            emit_byte(chunk, OP_STORE_VAR);
+            emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
+            emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
+            
+            // 3. Store the end value in a temporary variable (recompute each time for now)
+            // We'll compare against range.end each iteration
+            
+            // 4. Loop start label
+            int loopStart = chunk->code_count;
+            
+            // 5. Loop condition: var <= end
+            // Load current variable value
+            emit_byte(chunk, OP_LOAD_VAR);
+            emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
+            emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
+            
+            // Load end value
+            compile_expression(range->range.end, chunk, symtab);
+            
+            // Compare: var <= end
+            emit_byte(chunk, OP_LTE);
+            
+            // Jump if false (end loop)
+            int loopEndJump = emit_jump(chunk, OP_JUMP_IF_FALSE);
+            
+            // 6. Compile loop body
+            compile_node(node->naked_iterator.body, chunk, symtab);
+            
+            // 7. Increment the iterator variable: var = var + 1
+            // Load current variable value
+            emit_byte(chunk, OP_LOAD_VAR);
+            emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
+            emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
+            
+            // Load constant 1
+            RuntimeValue one;
+            one.type = RUNTIME_VALUE_NUMBER;
+            one.number_value = 1.0;
+            emit_constant(chunk, one);
+            
+            // Add: var + 1
+            emit_byte(chunk, OP_ADD);
+            
+            // Store back to variable
+            emit_byte(chunk, OP_STORE_VAR);
+            emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
+            emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
+            
+            // 8. Jump back to loop start
+            emit_byte(chunk, OP_LOOP);
+            int offset = chunk->code_count - loopStart + 2;
+            emit_byte(chunk, (offset >> 8) & 0xFF);
+            emit_byte(chunk, offset & 0xFF);
+            
+            // 9. Patch the end jump
+            patch_jump(chunk, loopEndJump);
+            
+            break;
+        }
         case AST_FUNCTION_DEF: {
             // Emit a jump to skip the function body during normal execution
             emit_byte(chunk, OP_JUMP);
@@ -976,6 +1047,7 @@ static void compile_node(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symta
         case AST_IF_STATEMENT:
         case AST_WHILE_LOOP:
         case AST_FOR_LOOP:
+        case AST_NAKED_ITERATOR:
         case AST_FUNCTION_DEF:
         case AST_BLOCK:
         case AST_BINARY_OP:

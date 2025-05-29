@@ -25,12 +25,12 @@ tests=(
     "test_05_operators.ember"
     "test_06_control_flow.ember"
     "test_07_mixins.ember"
-    # "test_08_complex_expressions.ember"  # Partial - parser limitations fixed, but method call issues remain
+    "test_08_complex_expressions.ember"  # Mostly working - minor if-statement edge cases remain
 )
 
 passed=0
 failed=0
-skipped=1
+skipped=0
 
 # Run each test
 for test in "${tests[@]}"; do
@@ -55,11 +55,11 @@ echo "========================================"
 echo "Total Tests: $((passed + failed + skipped))"
 echo "Passed: $passed"
 echo "Failed: $failed"
-echo "Skipped: $skipped (method call issues in complex expressions)"
+echo "Skipped: $skipped"
 
 if [ $failed -eq 0 ]; then
-    echo "🎉 All runnable tests passed!"
-    echo "📝 Note: Complex expressions test has method call issues but parser limitations are fixed"
+    echo "🎉 All tests passed!"
+    echo "📝 Note: Minor if-statement edge cases in functions remain (test_08)"
     exit 0
 else
     echo "⚠️  Some tests failed."

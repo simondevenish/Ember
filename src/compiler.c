@@ -14,6 +14,7 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
 static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab);
 static void compile_node(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab);
 static void compile_function_body(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab);
+static void compile_if_statement_with_return(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab);
 
 /* -------------------------------------------------------
    Symbol Table Implementation
@@ -171,6 +172,10 @@ static void compile_function_body(ASTNode* node, BytecodeChunk* chunk, SymbolTab
                         // These are expressions - compile them without OP_POP
                         compile_expression(statement, chunk, symtab);
                         break;
+                    case AST_IF_STATEMENT:
+                        // Special handling for if statements as return values
+                        compile_if_statement_with_return(statement, chunk, symtab);
+                        break;
                     default:
                         // Regular statements - compile normally and push null as return value
                         compile_statement(statement, chunk, symtab);
@@ -208,6 +213,10 @@ static void compile_function_body(ASTNode* node, BytecodeChunk* chunk, SymbolTab
                 // Expression - compile without OP_POP
                 compile_expression(node, chunk, symtab);
                 break;
+            case AST_IF_STATEMENT:
+                // Special handling for if statements as return values
+                compile_if_statement_with_return(node, chunk, symtab);
+                break;
             default:
                 // Statement - compile normally and push null
                 compile_statement(node, chunk, symtab);
@@ -217,6 +226,55 @@ static void compile_function_body(ASTNode* node, BytecodeChunk* chunk, SymbolTab
                 break;
         }
     }
+}
+
+/* -------------------------------------------------------
+   Special if statement compiler that preserves result on stack for function returns
+   ------------------------------------------------------- */
+static void compile_if_statement_with_return(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab) {
+    if (!node || node->type != AST_IF_STATEMENT) {
+        fprintf(stderr, "Compiler error: compile_if_statement_with_return called with non-if node\n");
+        return;
+    }
+
+    // if (cond) { body } else { elseBody } - but preserve result values on stack
+    // compile condition
+    compile_expression(node->if_statement.condition, chunk, symtab);
+    
+    // Jump if false => else part
+    int elseJump = emit_jump(chunk, OP_JUMP_IF_FALSE);
+    
+    // compile if body - check if it's a single expression or block
+    if (node->if_statement.body->type == AST_BLOCK) {
+        // For blocks, we need to ensure the last statement produces a value
+        compile_function_body(node->if_statement.body, chunk, symtab);
+    } else {
+        // Single statement - compile as expression if possible
+        compile_expression(node->if_statement.body, chunk, symtab);
+    }
+    
+    // jump over else
+    int endJump = emit_jump(chunk, OP_JUMP);
+    
+    // patch else jump
+    patch_jump(chunk, elseJump);
+    
+    // compile else if it exists
+    if (node->if_statement.else_body) {
+        if (node->if_statement.else_body->type == AST_BLOCK) {
+            compile_function_body(node->if_statement.else_body, chunk, symtab);
+        } else {
+            compile_expression(node->if_statement.else_body, chunk, symtab);
+        }
+    } else {
+        // No else branch - push null as default value
+        RuntimeValue null_val;
+        null_val.type = RUNTIME_VALUE_NULL;
+        emit_constant(chunk, null_val);
+    }
+    
+    // patch end jump
+    patch_jump(chunk, endJump);
 }
 
 /* -------------------------------------------------------
@@ -536,6 +594,11 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             func_val.function_value.user_function = user_func;
             
             emit_constant(chunk, func_val);
+            break;
+        }
+        case AST_IF_STATEMENT: {
+            // If statement as expression - use the special return-preserving compiler
+            compile_if_statement_with_return(node, chunk, symtab);
             break;
         }
         default:

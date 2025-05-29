@@ -62,6 +62,7 @@ typedef enum {
     OP_GET_INDEX,        // a[b] (array or object index)
     OP_SET_INDEX,        // a[b] = c
     OP_GET_LENGTH,       // Get length of array or object
+    OP_GET_KEYS,         // Get keys of object as array
     OP_NEW_OBJECT,       // Create a new object/map/dict
     OP_SET_PROPERTY,     // object.prop = value
     OP_SET_NESTED_PROPERTY, // object.prop1.prop2... = value (for nested properties)

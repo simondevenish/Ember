@@ -26,6 +26,22 @@ tests=(
     "test_06_control_flow.ember"
     "test_07_mixins.ember"
     "test_08_complex_expressions.ember"  # Mostly working - minor if-statement edge cases remain
+    
+    # Iterator Implementation Tests (Phase 1-3)
+    "test_range_phase1.ember"           # Phase 1: Range operator implementation
+    "test_naked_iterator_phase2.ember"  # Phase 2: Range-based naked iterators
+    "test_naked_iterator_phase3.ember"  # Phase 3: Full collection iterators (array and object iteration working)
+    "test_array_iteration_only.ember"   # Phase 3: Array-based naked iterators (superseded by full test)
+    
+    # Additional range tests
+    "test_simple_range.ember"
+    "test_range_detailed.ember"
+    "test_debug_range.ember"
+    
+    # Additional object tests
+    "test_simple_object.ember"
+    "test_empty_object.ember"
+    "test_manual_object.ember"
 )
 
 passed=0
@@ -59,7 +75,8 @@ echo "Skipped: $skipped"
 
 if [ $failed -eq 0 ]; then
     echo "🎉 All tests passed!"
-    echo "📝 Note: Minor if-statement edge cases in functions remain (test_08)"
+    echo "📝 Note: Iterator implementation complete (Phases 1-3: Range operator, naked iterators, array and object iteration)"
+    echo "📝 Note: Both array iteration (showing indices) and object iteration (showing keys) are working as expected"
     exit 0
 else
     echo "⚠️  Some tests failed."

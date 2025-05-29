@@ -890,37 +890,62 @@ ASTNode* parse_statement(Parser* parser) {
             // Check for naked iterator pattern: identifier: range_expression followed by indented block
             bool is_naked_iterator = false;
             if (!is_function) {
-                // Try to determine if this could be a range expression
-                // Look for patterns like: number..number, identifier..identifier, etc.
-                // We'll do a simple heuristic: if we see a potential range expression followed by newline + indent
-                
-                // Parse ahead to see if we can find a range pattern
-                int lookahead_count = 0;
-                while (lookahead_count < 20 && parser->current_token.type != TOKEN_EOF) {
-                    if (parser->current_token.type == TOKEN_OPERATOR && 
-                        strcmp(parser->current_token.value, "..") == 0) {
-                        // Found range operator, continue looking for newline + indent
-                        parser_advance(parser);
-                        lookahead_count++;
-                        continue;
-                    } else if (parser->current_token.type == TOKEN_NEWLINE) {
-                        parser_advance(parser);
-                        lookahead_count++;
-                        // Check if next token is INDENT
-                        if (parser->current_token.type == TOKEN_INDENT) {
-                            is_naked_iterator = true;
+                // First, check if this is an object literal assignment (identifier: { ... })
+                // If so, it's definitely NOT a naked iterator
+                if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                    strcmp(parser->current_token.value, "{") == 0) {
+                    // This is an object literal assignment, not a naked iterator
+                    is_naked_iterator = false;
+                } else {
+                    // Try to determine if this could be a range expression or array/variable
+                    // Look for patterns like: number..number, identifier..identifier, [array], variable
+                    // We'll do a simple heuristic: if we see a potential iterable expression followed by newline + indent
+                    
+                    // Parse ahead to see if we can find a range pattern or array/variable followed by indent
+                    int lookahead_count = 0;
+                    bool found_range_operator = false;
+                    bool found_iterable = false;
+                    
+                    while (lookahead_count < 20 && parser->current_token.type != TOKEN_EOF) {
+                        if (parser->current_token.type == TOKEN_OPERATOR && 
+                            strcmp(parser->current_token.value, "..") == 0) {
+                            // Found range operator
+                            found_range_operator = true;
+                            parser_advance(parser);
+                            lookahead_count++;
+                            continue;
+                        } else if (parser->current_token.type == TOKEN_NEWLINE) {
+                            parser_advance(parser);
+                            lookahead_count++;
+                            // Check if next token is INDENT
+                            if (parser->current_token.type == TOKEN_INDENT) {
+                                // Found indent - check if we have a valid iterable
+                                if (found_range_operator || found_iterable) {
+                                    is_naked_iterator = true;
+                                }
+                                break;
+                            }
+                        } else if (parser->current_token.type == TOKEN_IDENTIFIER && !found_range_operator) {
+                            // This could be a variable or array reference (iterable)
+                            found_iterable = true;
+                            parser_advance(parser);
+                            lookahead_count++;
+                        } else if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                                   strcmp(parser->current_token.value, "[") == 0 && !found_range_operator) {
+                            // This could be an array literal (iterable)
+                            found_iterable = true;
+                            parser_advance(parser);
+                            lookahead_count++;
+                        } else if (parser->current_token.type == TOKEN_NUMBER || 
+                                  parser->current_token.type == TOKEN_PUNCTUATION ||
+                                  parser->current_token.type == TOKEN_OPERATOR) {
+                            // Continue parsing potential range expression
+                            parser_advance(parser);
+                            lookahead_count++;
+                        } else {
+                            // Hit something unexpected, break
                             break;
                         }
-                    } else if (parser->current_token.type == TOKEN_NUMBER || 
-                              parser->current_token.type == TOKEN_IDENTIFIER ||
-                              parser->current_token.type == TOKEN_PUNCTUATION ||
-                              parser->current_token.type == TOKEN_OPERATOR) {
-                        // Continue parsing potential range expression
-                        parser_advance(parser);
-                        lookahead_count++;
-                    } else {
-                        // Hit something unexpected, break
-                        break;
                     }
                 }
             }

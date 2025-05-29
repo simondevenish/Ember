@@ -715,6 +715,7 @@ int vm_run(VM* vm) {
             case OP_COPY_PROPERTIES: instruction_name = "OP_COPY_PROPERTIES"; break;
             case OP_CALL_METHOD: instruction_name = "OP_CALL_METHOD"; break;
             case OP_GET_LENGTH: instruction_name = "OP_GET_LENGTH"; break;
+            case OP_GET_KEYS: instruction_name = "OP_GET_KEYS"; break;
             default: break;
         }
         
@@ -1340,28 +1341,56 @@ int vm_run(VM* vm) {
             }
 
             case OP_GET_INDEX: {
-                // Expect: top => index, below => array
+                // Generic accessor: works with both arrays and objects
+                // Expect: top => index/key, below => array/object
                 RuntimeValue indexVal = vm_pop(vm);
-                RuntimeValue arrVal   = vm_pop(vm);
+                RuntimeValue containerVal = vm_pop(vm);
 
-                if (arrVal.type != RUNTIME_VALUE_ARRAY) {
-                    fprintf(stderr, "VM Error: OP_GET_INDEX on non-array.\n");
+                if (containerVal.type == RUNTIME_VALUE_ARRAY) {
+                    // Array access: requires numeric index
+                    if (indexVal.type != RUNTIME_VALUE_NUMBER) {
+                        fprintf(stderr, "VM Error: Array access requires numeric index, got type %d.\n", indexVal.type);
+                        return 1;
+                    }
+
+                    int idx = (int)indexVal.number_value;
+                    if (idx < 0 || idx >= containerVal.array_value.count) {
+                        fprintf(stderr, "VM Error: Array index %d out of bounds.\n", idx);
+                        return 1;
+                    }
+
+                    // Retrieve array element
+                    RuntimeValue element = runtime_value_copy(&containerVal.array_value.elements[idx]);
+                    vm_push(vm, element);
+                } else if (containerVal.type == RUNTIME_VALUE_OBJECT) {
+                    // Object property access: requires string key
+                    if (indexVal.type != RUNTIME_VALUE_STRING) {
+                        fprintf(stderr, "VM Error: Object property access requires string key, got type %d.\n", indexVal.type);
+                        return 1;
+                    }
+
+                    const char* propName = indexVal.string_value;
+                    bool found = false;
+                    RuntimeValue result = {.type = RUNTIME_VALUE_NULL}; // Default to null if property not found
+                    
+                    // Look for the property in the object
+                    for (int i = 0; i < containerVal.object_value.count; i++) {
+                        if (strcmp(containerVal.object_value.keys[i], propName) == 0) {
+                            result = runtime_value_copy(&containerVal.object_value.values[i]);
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found) {
+                        fprintf(stderr, "VM Warning: Object has no property '%s'.\n", propName);
+                    }
+                    
+                    vm_push(vm, result);
+                } else {
+                    fprintf(stderr, "VM Error: OP_GET_INDEX can only be used on arrays or objects, got type %d.\n", containerVal.type);
                     return 1;
                 }
-                if (indexVal.type != RUNTIME_VALUE_NUMBER) {
-                    fprintf(stderr, "VM Error: OP_GET_INDEX requires numeric index.\n");
-                    return 1;
-                }
-
-                int idx = (int)indexVal.number_value;
-                if (idx < 0 || idx >= arrVal.array_value.count) {
-                    fprintf(stderr, "VM Error: Array index %d out of bounds.\n", idx);
-                    return 1;
-                }
-
-                // Retrieve element
-                RuntimeValue element = arrVal.array_value.elements[idx];
-                vm_push(vm, element);
                 break;
             }
 
@@ -1379,6 +1408,63 @@ int vm_run(VM* vm) {
                     result.number_value = (double)strlen(val.string_value);
                 } else {
                     fprintf(stderr, "VM Error: OP_GET_LENGTH on unsupported type %d.\n", val.type);
+                    return 1;
+                }
+                
+                vm_push(vm, result);
+                break;
+            }
+
+            case OP_GET_KEYS: {
+                // Get keys/indices of array or object as an array
+                RuntimeValue val = vm_pop(vm);
+                RuntimeValue result;
+                result.type = RUNTIME_VALUE_ARRAY;
+                
+                if (val.type == RUNTIME_VALUE_OBJECT) {
+                    // For objects: return the keys as strings
+                    result.array_value.count = val.object_value.count;
+                    
+                    if (val.object_value.count > 0) {
+                        result.array_value.elements = malloc(sizeof(RuntimeValue) * val.object_value.count);
+                        if (!result.array_value.elements) {
+                            fprintf(stderr, "VM Error: Memory allocation failed for OP_GET_KEYS.\n");
+                            return 1;
+                        }
+                        
+                        // Copy each key as a string into the array
+                        for (int i = 0; i < val.object_value.count; i++) {
+                            result.array_value.elements[i].type = RUNTIME_VALUE_STRING;
+                            result.array_value.elements[i].string_value = strdup(val.object_value.keys[i]);
+                            if (!result.array_value.elements[i].string_value) {
+                                fprintf(stderr, "VM Error: Memory allocation failed for key string.\n");
+                                return 1;
+                            }
+                        }
+                    } else {
+                        result.array_value.elements = NULL;
+                    }
+                } else if (val.type == RUNTIME_VALUE_ARRAY) {
+                    // For arrays: return the indices as numbers (0, 1, 2, ...)
+                    result.array_value.count = val.array_value.count;
+                    
+                    if (val.array_value.count > 0) {
+                        result.array_value.elements = malloc(sizeof(RuntimeValue) * val.array_value.count);
+                        if (!result.array_value.elements) {
+                            fprintf(stderr, "VM Error: Memory allocation failed for OP_GET_KEYS.\n");
+                            return 1;
+                        }
+                        
+                        // Create indices as numbers (0, 1, 2, ...)
+                        for (int i = 0; i < val.array_value.count; i++) {
+                            result.array_value.elements[i].type = RUNTIME_VALUE_NUMBER;
+                            result.array_value.elements[i].number_value = (double)i;
+                        }
+                    } else {
+                        result.array_value.elements = NULL;
+                    }
+                } else {
+                    fprintf(stderr, "VM Error: OP_GET_KEYS only works on objects or arrays, got type %d.\n", val.type);
                     return 1;
                 }
                 

@@ -1,0 +1,71 @@
+// Test 03: Object Literals and Property Access
+print("=== Testing Objects ===")
+
+// Simple object
+person: {
+    name: "Alice",
+    age: 30,
+    active: true
+}
+
+print("Simple object:")
+print("  person.name: " + person.name)
+print("  person.age: " + person.age)
+print("  person.active: " + person.active)
+
+// Object with different data types
+mixedObj: {
+    str: "hello",
+    num: 42,
+    bool: false,
+    nil: null
+}
+
+print("Mixed type object:")
+print("  mixedObj.str: " + mixedObj.str)
+print("  mixedObj.num: " + mixedObj.num)
+print("  mixedObj.bool: " + mixedObj.bool)
+print("  mixedObj.nil: " + mixedObj.nil)
+
+// Nested objects
+company: {
+    name: "TechCorp",
+    address: {
+        street: "123 Main St",
+        city: "Techville",
+        coordinates: {
+            lat: 40.7128,
+            lng: -74.0060
+        }
+    },
+    employees: {
+        count: 50,
+        departments: ["Engineering", "Sales", "Marketing"]
+    }
+}
+
+print("Nested object access:")
+print("  company.name: " + company.name)
+print("  company.address.street: " + company.address.street)
+print("  company.address.city: " + company.address.city)
+print("  company.address.coordinates.lat: " + company.address.coordinates.lat)
+print("  company.address.coordinates.lng: " + company.address.coordinates.lng)
+print("  company.employees.count: " + company.employees.count)
+print("  company.employees.departments: " + company.employees.departments)
+print("  company.employees.departments[0]: " + company.employees.departments[0])
+
+// Property assignment
+person.age = 31
+person.location = "New York"
+company.employees.count = 55
+
+print("After property assignment:")
+print("  person.age: " + person.age)
+print("  person.location: " + person.location)
+print("  company.employees.count: " + company.employees.count)
+
+// Empty object
+emptyObj: {}
+print("Empty object: " + emptyObj)
+
+print("=== Object Tests Complete ===") 

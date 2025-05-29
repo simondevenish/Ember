@@ -1,0 +1,84 @@
+// Test 05: Operators
+print("=== Testing Operators ===")
+
+// Arithmetic operators
+a: 10
+b: 3
+
+print("Arithmetic operators:")
+print("  a = " + a + ", b = " + b)
+print("  a + b = " + (a + b))
+print("  a - b = " + (a - b))
+print("  a * b = " + (a * b))
+print("  a / b = " + (a / b))
+
+// Unary operators
+x: 5
+y: -10
+flag: true
+
+print("Unary operators:")
+print("  x = " + x)
+print("  -x = " + (-x))
+print("  y = " + y)
+print("  -y = " + (-y))
+print("  flag = " + flag)
+print("  !flag = " + (!flag))
+
+// Comparison operators
+num1: 15
+num2: 20
+num3: 15
+
+print("Comparison operators:")
+print("  num1 = " + num1 + ", num2 = " + num2 + ", num3 = " + num3)
+print("  num1 == num2: " + (num1 == num2))
+print("  num1 == num3: " + (num1 == num3))
+print("  num1 != num2: " + (num1 != num2))
+print("  num1 < num2: " + (num1 < num2))
+print("  num2 > num1: " + (num2 > num1))
+print("  num1 <= num3: " + (num1 <= num3))
+print("  num2 >= num1: " + (num2 >= num1))
+
+// Logical operators (&&, ||)
+bool1: true
+bool2: false
+
+print("Logical operators:")
+print("  bool1 = " + bool1 + ", bool2 = " + bool2)
+print("  bool1 && bool2: " + (bool1 && bool2))
+print("  bool1 || bool2: " + (bool1 || bool2))
+print("  !bool1 && bool2: " + (!bool1 && bool2))
+print("  bool1 || !bool2: " + (bool1 || !bool2))
+
+// Operator precedence
+result1: 2 + 3 * 4
+result2: (2 + 3) * 4
+result3: 10 - 4 + 2
+result4: 10 - (4 + 2)
+
+print("Operator precedence:")
+print("  2 + 3 * 4 = " + result1)
+print("  (2 + 3) * 4 = " + result2)
+print("  10 - 4 + 2 = " + result3)
+print("  10 - (4 + 2) = " + result4)
+
+// Complex expressions
+complex1: (5 + 3) * 2 - 1
+complex2: 10 > 5 && 3 < 7
+complex3: (true || false) && (10 == 10)
+
+print("Complex expressions:")
+print("  (5 + 3) * 2 - 1 = " + complex1)
+print("  10 > 5 && 3 < 7 = " + complex2)
+print("  (true || false) && (10 == 10) = " + complex3)
+
+// String concatenation
+str1: "Hello"
+str2: "World"
+combined: str1 + " " + str2
+
+print("String operations:")
+print("  str1 + \" \" + str2 = " + combined)
+
+print("=== Operator Tests Complete ===") 

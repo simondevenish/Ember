@@ -1,0 +1,115 @@
+// Test 06: Control Flow
+print("=== Testing Control Flow ===")
+
+// If statements
+x: 10
+y: 5
+
+print("If statements:")
+if (x > y) {
+    print("  x is greater than y")
+}
+
+if (x < y) {
+    print("  x is less than y")
+} else {
+    print("  x is NOT less than y")
+}
+
+// If-else if-else
+score: 85
+
+print("Grade calculation:")
+if (score >= 90) {
+    print("  Grade: A")
+} else if (score >= 80) {
+    print("  Grade: B")
+} else if (score >= 70) {
+    print("  Grade: C")
+} else {
+    print("  Grade: F")
+}
+
+// While loops
+print("While loop (counting to 5):")
+counter: 1
+while (counter <= 5) {
+    print("  Count: " + counter)
+    counter = counter + 1
+}
+
+print("While loop with condition:")
+num: 1
+while (num < 10) {
+    if (num == 3) {
+        print("  Found 3, continuing...")
+        num = num + 1
+    } else {
+        print("  Number: " + num)
+        num = num + 2
+    }
+}
+
+// For loops
+print("For loop (basic):")
+for (i = 0; i < 5; i = i + 1) {
+    print("  i = " + i)
+}
+
+print("For loop (with variable declaration):")
+for (var j = 10; j > 5; j = j - 1) {
+    print("  j = " + j)
+}
+
+print("For loop (step by 2):")
+for (k = 0; k <= 10; k = k + 2) {
+    print("  k = " + k)
+}
+
+// Nested control flow
+print("Nested control flow:")
+for (outer = 1; outer <= 3; outer = outer + 1) {
+    print("  Outer loop: " + outer)
+    for (inner = 1; inner <= 2; inner = inner + 1) {
+        print("    Inner loop: " + inner)
+    }
+}
+
+// Control flow with functions
+checkNumber: fn(n) {
+    if (n > 0) {
+        print("    " + n + " is positive")
+    } else if (n < 0) {
+        print("    " + n + " is negative")
+    } else {
+        print("    " + n + " is zero")
+    }
+}
+
+print("Function with control flow:")
+numbers: [-5, 0, 3, -2, 7]
+for (idx = 0; idx < 5; idx = idx + 1) {
+    checkNumber(numbers[idx])
+}
+
+// Complex conditions
+print("Complex conditions:")
+age: 25
+hasLicense: true
+
+if (age >= 18 && hasLicense) {
+    print("  Can drive")
+} else {
+    print("  Cannot drive")
+}
+
+temperature: 75
+isRaining: false
+
+if (temperature > 70 && !isRaining) {
+    print("  Perfect weather for a walk")
+} else if (temperature <= 70 || isRaining) {
+    print("  Maybe stay inside")
+}
+
+print("=== Control Flow Tests Complete ===") 

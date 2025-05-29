@@ -1,0 +1,85 @@
+// Test 04: Functions and Method Calls
+print("=== Testing Functions ===")
+
+// Function definition (new colon syntax)
+greet: fn(name) {
+    print("Hello, " + name + "!")
+}
+
+// Function calls
+print("Function calls:")
+greet("Alice")
+greet("Bob")
+
+// Function with return value (using expressions)
+add: fn(a, b) {
+    a + b
+}
+
+result: add(5, 3)
+print("add(5, 3) = " + result)
+
+// Function with multiple parameters
+introduce: fn(name, age, city) {
+    print(name + " is " + age + " years old and lives in " + city)
+}
+
+introduce("Charlie", 25, "Boston")
+
+// Function expressions in variables
+multiply: fn(x, y) { x * y }
+product: multiply(4, 7)
+print("multiply(4, 7) = " + product)
+
+// Functions in objects (methods)
+calculator: {
+    name: "BasicCalc",
+    
+    add: fn(a, b) {
+        print(this.name + " adding " + a + " + " + b)
+        a + b
+    },
+    
+    subtract: fn(a, b) {
+        print(this.name + " subtracting " + a + " - " + b)
+        a - b
+    },
+    
+    getInfo: fn() {
+        print("Calculator name: " + this.name)
+    }
+}
+
+print("Method calls:")
+calculator.getInfo()
+sum: calculator.add(10, 5)
+diff: calculator.subtract(10, 5)
+print("Sum: " + sum)
+print("Difference: " + diff)
+
+// Nested function calls
+processData: fn(data) {
+    print("Processing: " + data)
+    data + " processed"
+}
+
+transformData: fn(input) {
+    processData(input + " transformed")
+}
+
+finalResult: transformData("raw data")
+print("Final result: " + finalResult)
+
+// Functions with object parameters
+printPerson: fn(person) {
+    print("Person: " + person.name + ", Age: " + person.age)
+}
+
+testPerson: {
+    name: "Diana",
+    age: 28
+}
+
+printPerson(testPerson)
+
+print("=== Function Tests Complete ===") 

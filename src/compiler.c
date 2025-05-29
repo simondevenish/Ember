@@ -336,8 +336,12 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
 
             // Then, add each regular property to the object
             for (int i = 0; i < node->object_literal.property_count; i++) {
-                // Duplicate the object reference on the stack
-                emit_byte(chunk, OP_DUP);
+                // Duplicate the object reference on the stack (for all properties except the last one)
+                // For the last property, we don't duplicate because OP_SET_PROPERTY will consume
+                // the object and push back the updated version
+                if (i < node->object_literal.property_count - 1) {
+                    emit_byte(chunk, OP_DUP);
+                }
                 
                 // Push property key (as string constant)
                 RuntimeValue key_val;
@@ -350,6 +354,8 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
                 
                 // Set property on object
                 emit_byte(chunk, OP_SET_PROPERTY);
+                // After OP_SET_PROPERTY: if we duplicated the object, stack has [originalObj, updatedObj]
+                // If we didn't duplicate (last property), stack has [updatedObj]
             }
             
             // The resulting object is on the stack top

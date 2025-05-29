@@ -1,0 +1,47 @@
+// Test 02: Array Operations
+print("=== Testing Arrays ===")
+
+// Array creation
+simpleArray: [1, 2, 3, 4, 5]
+print("Simple array: " + simpleArray)
+
+// Mixed type array
+mixedArray: ["hello", 42, true, null]
+print("Mixed array: " + mixedArray)
+
+// Empty array
+emptyArray: []
+print("Empty array: " + emptyArray)
+
+// Array indexing
+print("Array indexing:")
+print("  simpleArray[0]: " + simpleArray[0])
+print("  simpleArray[2]: " + simpleArray[2])
+print("  simpleArray[4]: " + simpleArray[4])
+
+print("Mixed array indexing:")
+print("  mixedArray[0]: " + mixedArray[0])
+print("  mixedArray[1]: " + mixedArray[1])
+print("  mixedArray[2]: " + mixedArray[2])
+print("  mixedArray[3]: " + mixedArray[3])
+
+// Nested arrays
+nestedArray: [[1, 2], [3, 4], [5, 6]]
+print("Nested array: " + nestedArray)
+print("  nestedArray[0]: " + nestedArray[0])
+print("  nestedArray[1]: " + nestedArray[1])
+print("  nestedArray[0][0]: " + nestedArray[0][0])
+print("  nestedArray[1][1]: " + nestedArray[1][1])
+
+// Complex nested structure
+complexArray: [
+    "string",
+    [10, 20, 30],
+    ["a", "b", "c"],
+    42
+]
+print("Complex array: " + complexArray)
+print("  complexArray[1][2]: " + complexArray[1][2])
+print("  complexArray[2][0]: " + complexArray[2][0])
+
+print("=== Array Tests Complete ===") 

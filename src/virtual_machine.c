@@ -1462,7 +1462,7 @@ int vm_run(VM* vm) {
                     }
                 }
                 
-                // Push the updated object back
+                // Push the updated object back - this replaces the original object
                 vm_push(vm, objectCopy);
                 
                 // Free our local copy since vm_push makes its own copy

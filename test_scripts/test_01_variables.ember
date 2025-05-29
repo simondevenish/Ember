@@ -1,0 +1,37 @@
+// Test 01: Variable Declarations and Assignments
+print("=== Testing Variable Declarations ===")
+
+// Old syntax variable declarations
+var oldVar = "old style"
+print("Old var: " + oldVar)
+
+// New colon syntax 
+var newVar: "new style"
+print("New var: " + newVar)
+
+// Let declarations (immutable)
+let constVar: "constant value"
+print("Let var: " + constVar)
+
+// Implicit variable declarations
+implicitVar: "implicit style"
+print("Implicit var: " + implicitVar)
+
+// Variable reassignment
+oldVar = "reassigned"
+newVar = "also reassigned"
+implicitVar = "changed"
+print("After reassignment:")
+print("  oldVar: " + oldVar)
+print("  newVar: " + newVar) 
+print("  implicitVar: " + implicitVar)
+
+// Different data types
+numberVar: 42
+boolVar: true
+nullVar: null
+print("Number: " + numberVar)
+print("Boolean: " + boolVar)
+print("Null: " + nullVar)
+
+print("=== Variable Tests Complete ===") 

@@ -1,0 +1,69 @@
+// Master Test Runner for EmberScript
+print("========================================")
+print("       EmberScript Test Suite")
+print("========================================")
+print("")
+
+// Test configuration
+totalTests: 8
+passedTests: 0
+
+testPassed: fn(testName) {
+    print("✅ " + testName + " - PASSED")
+    passedTests = passedTests + 1
+}
+
+testFailed: fn(testName, error) {
+    print("❌ " + testName + " - FAILED: " + error)
+}
+
+print("Running " + totalTests + " test modules...")
+print("")
+
+// Note: In a full implementation, we would import each test file
+// For now, we'll provide a test summary and individual test instructions
+
+print("TEST MODULES:")
+print("1. test_01_variables.ember    - Variable declarations and assignments")
+print("2. test_02_arrays.ember       - Array operations and indexing")
+print("3. test_03_objects.ember      - Object literals and property access")
+print("4. test_04_functions.ember    - Functions and method calls")
+print("5. test_05_operators.ember    - All operators and expressions")
+print("6. test_06_control_flow.ember - If/else, loops, and control structures")
+print("7. test_07_mixins.ember       - Mixin functionality")
+print("8. test_08_complex_expressions.ember - Complex nested operations")
+print("")
+
+print("TO RUN ALL TESTS:")
+print("Run each test file individually with:")
+print("  ./build/emberc exec test_scripts/test_XX_name.ember")
+print("")
+
+print("FEATURES COVERED:")
+print("✅ Variable declarations (var, let, implicit)")
+print("✅ Arrays (creation, indexing, nested)")
+print("✅ Objects (literals, property access/assignment)")
+print("✅ Functions (definitions, calls, expressions)")
+print("✅ Operators (arithmetic, logical, comparison)")
+print("✅ Control flow (if/else, while, for)")
+print("✅ Mixins (single, multiple, with properties)")
+print("✅ Complex expressions (nested access, chaining)")
+print("✅ Method calls with 'this' context")
+print("✅ String operations and concatenation")
+print("")
+
+print("QUICK TEST RUNNER:")
+print("To run a specific test category:")
+print("  variables:  ./build/emberc exec test_scripts/test_01_variables.ember")
+print("  arrays:     ./build/emberc exec test_scripts/test_02_arrays.ember")
+print("  objects:    ./build/emberc exec test_scripts/test_03_objects.ember")
+print("  functions:  ./build/emberc exec test_scripts/test_04_functions.ember")
+print("  operators:  ./build/emberc exec test_scripts/test_05_operators.ember")
+print("  control:    ./build/emberc exec test_scripts/test_06_control_flow.ember")
+print("  mixins:     ./build/emberc exec test_scripts/test_07_mixins.ember")
+print("  complex:    ./build/emberc exec test_scripts/test_08_complex_expressions.ember")
+print("")
+
+print("========================================")
+print("     EmberScript Test Suite Ready")
+print("========================================") 

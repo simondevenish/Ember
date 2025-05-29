@@ -1,0 +1,196 @@
+// Test 08: Complex Expressions and Edge Cases
+print("=== Testing Complex Expressions ===")
+
+// Complex nested property access
+gameData: {
+    player: {
+        stats: {
+            health: 100,
+            mana: 50,
+            inventory: {
+                weapons: ["sword", "bow"],
+                potions: {
+                    health: 5,
+                    mana: 3
+                }
+            }
+        },
+        location: {
+            x: 10,
+            y: 20,
+            zone: "forest"
+        }
+    },
+    settings: {
+        difficulty: "normal",
+        volume: 0.8
+    }
+}
+
+print("Complex property access:")
+print("  Player health: " + gameData.player.stats.health)
+print("  First weapon: " + gameData.player.stats.inventory.weapons[0])
+print("  Health potions: " + gameData.player.stats.inventory.potions.health)
+print("  Player zone: " + gameData.player.location.zone)
+print("  Game volume: " + gameData.settings.volume)
+
+// Complex array operations
+matrix: [
+    [1, 2, 3],
+    [4, 5, 6],
+    [7, 8, 9]
+]
+
+print("Matrix operations:")
+print("  matrix[1][2]: " + matrix[1][2])
+print("  matrix[0]: " + matrix[0])
+sum: matrix[0][0] + matrix[1][1] + matrix[2][2]
+print("  Diagonal sum: " + sum)
+
+// Chained method calls
+processor: {
+    name: "DataProcessor",
+    data: [],
+    
+    addData: fn(value) {
+        print("Adding: " + value)
+        this.data = [value]  // Simplified for test
+        this
+    },
+    
+    transform: fn() {
+        print("Transforming data")
+        this
+    },
+    
+    getResult: fn() {
+        print("Getting result from " + this.name)
+        this.data[0] + " processed"
+    }
+}
+
+print("Chained operations:")
+result: processor.addData("test").transform().getResult()
+print("  Final result: " + result)
+
+// Complex function calls with nested expressions
+calculator2: {
+    power: fn(base, exp) {
+        if (exp == 0) {
+            1
+        } else {
+            result: base
+            for (i = 1; i < exp; i = i + 1) {
+                result = result * base
+            }
+            result
+        }
+    },
+    
+    factorial: fn(n) {
+        if (n <= 1) {
+            1
+        } else {
+            result: 1
+            for (i = 2; i <= n; i = i + 1) {
+                result = result * i
+            }
+            result
+        }
+    }
+}
+
+print("Complex calculations:")
+power_result: calculator2.power(2, 3)
+factorial_result: calculator2.factorial(5)
+combined: power_result + factorial_result
+print("  2^3 = " + power_result)
+print("  5! = " + factorial_result)
+print("  Combined: " + combined)
+
+// Mixed data type operations
+mixed: {
+    numbers: [1, 2, 3, 4, 5],
+    strings: ["a", "b", "c"],
+    objects: [
+        { id: 1, name: "first" },
+        { id: 2, name: "second" }
+    ],
+    
+    processAll: fn() {
+        print("Processing numbers: " + this.numbers)
+        print("Processing strings: " + this.strings)
+        print("First object name: " + this.objects[0].name)
+        print("Second object id: " + this.objects[1].id)
+    }
+}
+
+mixed.processAll()
+
+// Expression evaluation order
+a: 2
+b: 3
+c: 4
+
+expr1: a + b * c
+expr2: (a + b) * c
+expr3: a * b + c
+expr4: a * (b + c)
+
+print("Expression evaluation:")
+print("  a=2, b=3, c=4")
+print("  a + b * c = " + expr1)
+print("  (a + b) * c = " + expr2)
+print("  a * b + c = " + expr3)
+print("  a * (b + c) = " + expr4)
+
+// Complex boolean expressions
+age: 25
+hasJob: true
+hasLicense: true
+hasExperience: false
+
+canApply: age >= 21 && hasJob && (hasLicense || hasExperience)
+shouldApply: (age > 18 && hasJob) || (age > 25 && hasLicense)
+
+print("Complex boolean logic:")
+print("  Can apply: " + canApply)
+print("  Should apply: " + shouldApply)
+
+// Nested function calls with property access
+dataStore: {
+    items: [
+        { name: "apple", price: 1.50 },
+        { name: "banana", price: 0.75 },
+        { name: "orange", price: 2.00 }
+    ],
+    
+    findByName: fn(searchName) {
+        for (i = 0; i < 3; i = i + 1) {
+            currentItem: this.items[i]
+            if (currentItem.name == searchName) {
+                print("Found " + searchName + " at index " + i)
+            }
+        }
+        this.items[1]  // Just return the banana item for testing
+    },
+    
+    getTotalValue: fn() {
+        total: 0
+        for (i = 0; i < 3; i = i + 1) {
+            total = total + this.items[i].price
+        }
+        total
+    }
+}
+
+foundItem: dataStore.findByName("banana")
+totalValue: dataStore.getTotalValue()
+
+print("Data store operations:")
+if (foundItem != null) {
+    print("  Found item: " + foundItem.name + " costs " + foundItem.price)
+}
+print("  Total value: " + totalValue)
+
+print("=== Complex Expression Tests Complete ===") 

@@ -2372,23 +2372,26 @@ ASTNode* parse_object_literal(Parser* parser) {
                 return object_node;
             }
             
-            // There are more properties after mixins - require a comma
+            // There are more properties after mixins - allow comma-less syntax
             if (parser->current_token.type == TOKEN_PUNCTUATION && 
                 strcmp(parser->current_token.value, ",") == 0) {
-                parser_advance(parser); // Skip ','
+                parser_advance(parser); // Skip ',' (comma is optional)
                 
                 // Skip any newlines after the comma
-                while (parser->current_token.type == TOKEN_NEWLINE) {
+                while (parser->current_token.type == TOKEN_NEWLINE || 
+                       parser->current_token.type == TOKEN_INDENT || 
+                       parser->current_token.type == TOKEN_DEDENT) {
                     parser_advance(parser);
                 }
             } else {
-                report_error(parser, "Expected ',' after mixin declaration when properties follow");
-                // Clean up
-                for (int i = 0; i < mixin_count; i++) {
-                    free(mixins[i]);
+                // NEW: Allow continuing to properties without comma after mixins
+                // Just skip any newlines and continue - no error needed
+                while (parser->current_token.type == TOKEN_NEWLINE || 
+                       parser->current_token.type == TOKEN_INDENT || 
+                       parser->current_token.type == TOKEN_DEDENT) {
+                    parser_advance(parser);
                 }
-                free(mixins);
-                return NULL;
+                // Continue to property parsing - comma-less syntax after mixins
             }
         }
     }
@@ -2516,13 +2519,15 @@ ASTNode* parse_object_literal(Parser* parser) {
             parser_advance(parser);
         }
 
-        // Look for ',' or '}'
+        // Look for ',' or '}' or continue with newline-separated properties
         if (parser->current_token.type == TOKEN_PUNCTUATION && 
             strcmp(parser->current_token.value, ",") == 0) {
-            parser_advance(parser); // Skip ','
+            parser_advance(parser); // Skip ',' (comma is optional now)
             
             // Skip any newlines after the comma
-            while (parser->current_token.type == TOKEN_NEWLINE) {
+            while (parser->current_token.type == TOKEN_NEWLINE || 
+                   parser->current_token.type == TOKEN_INDENT || 
+                   parser->current_token.type == TOKEN_DEDENT) {
                 parser_advance(parser);
             }
             
@@ -2536,15 +2541,29 @@ ASTNode* parse_object_literal(Parser* parser) {
             // End of object literal
             break;
         } else {
-            report_error(parser, "Expected ',' or '}' after object property");
-            // Clean up
-            for (int i = 0; i < property_count; i++) {
-                free(keys[i]);
-                free_ast(values[i]);
+            // NEW: Allow continuing to next property without comma
+            // If we see an identifier (next property key), that's valid for comma-less syntax
+            if (parser->current_token.type == TOKEN_IDENTIFIER || 
+                parser->current_token.type == TOKEN_STRING ||
+                (parser->current_token.type == TOKEN_PUNCTUATION && 
+                 strcmp(parser->current_token.value, ":") == 0 && property_count == 0)) {
+                // Continue parsing next property (comma-less syntax)
+                // This handles cases like:
+                // {
+                //   name: "test"     <- no comma here
+                //   age: 42          <- next property starts directly
+                // }
+            } else {
+                report_error(parser, "Expected ',' or newline or '}' after object property");
+                // Clean up
+                for (int i = 0; i < property_count; i++) {
+                    free(keys[i]);
+                    free_ast(values[i]);
+                }
+                free(keys);
+                free(values);
+                return NULL;
             }
-            free(keys);
-            free(values);
-            return NULL;
         }
     } while (1);
 

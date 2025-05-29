@@ -7,7 +7,7 @@
 //  3. Simplicity over complexity — fewer redundant lines, trusting the programmer's logic.
 //  4. No more conventional do/while/for/foreach — we have naked & covered iterators.
 //
-// NOTE: We’re now making all free-standing functions consistently defined as:
+// NOTE: We're now making all free-standing functions consistently defined as:
 //       myFunctionName: fn() {...}
 //
 // Additionally, we show usage of `var`, `let`, or omitted keywords for variables,
@@ -93,19 +93,6 @@ var KnightBehavior = {
 }
 
 var player = {
-  name: "Adventurer",
-  health: 50,
-  inventory: ["Sword", "Potion"],
-  greet: fn() {
-    print("Hello, I'm " + this.name)
-  }
-}
-
-// -----------------------------------------------------------------------------
-// 4) Create a player object using colon-syntax + initial mixin references
-//    Demonstrate indentation style, plus a portion with braces
-// -----------------------------------------------------------------------------
-var player = {
   :[MagicalBeing, InventorySystem]  // Mix in MagicalBeing & InventorySystem
   name: "Adventurer"
   health: 50
@@ -127,7 +114,7 @@ var player = {
     }
 
   // (B) Another event-bound function for "MonsterAlert"
-  //     Only triggers if monsterCount > 0, with a single filter "ofType(player)"
+  //     Only triggers if monsterCount > 0, with a filter "ofType(player)"
   monsterAlert: fn() <- [ "MonsterAlert" {
       if monsterCount > 0 {
         print("Player sees monsterCount=" + monsterCount + ", so monsterAlert triggers.")
@@ -187,7 +174,7 @@ player.defend()  // from KnightBehavior
 
 
 // -----------------------------------------------------------------------------
-// 8) A “covered” iterator with break-out and filter
+// 8) A "covered" iterator with break-out and filter
 //    Collect squares of even numbers from 1..10, but stop if >= 8
 // -----------------------------------------------------------------------------
 let evenSquares = [
@@ -204,7 +191,7 @@ print("Collected even squares until 8 => " + evenSquares)
 
 
 // -----------------------------------------------------------------------------
-// 9) A “naked” iterator for side effects only (indentation-based block)
+// 9) A "naked" iterator for side effects only (indentation-based block)
 // -----------------------------------------------------------------------------
 i: 0 to 3
   print("Day " + i + " => Foraging around camp...")
@@ -228,7 +215,7 @@ print("Now dayInfo => weather=" + dayInfo.weather + ", event=" + dayInfo.event)
 
 
 // -----------------------------------------------------------------------------
-// 11) Another “covered” iterator used purely for side effects on `player.health`
+// 11) Another "covered" iterator used purely for side effects on `player.health`
 // -----------------------------------------------------------------------------
 [
   step: 1 to 5 {

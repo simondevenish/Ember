@@ -33,17 +33,17 @@ print("multiply(4, 7) = " + product)
 
 // Functions in objects (methods)
 calculator: {
-    name: "BasicCalc",
+    name: "BasicCalc"
     
     add: fn(a, b) {
         print(this.name + " adding " + a + " + " + b)
         a + b
-    },
+    }
     
     subtract: fn(a, b) {
         print(this.name + " subtracting " + a + " - " + b)
         a - b
-    },
+    }
     
     getInfo: fn() {
         print("Calculator name: " + this.name)
@@ -76,7 +76,7 @@ printPerson: fn(person) {
 }
 
 testPerson: {
-    name: "Diana",
+    name: "Diana"
     age: 28
 }
 

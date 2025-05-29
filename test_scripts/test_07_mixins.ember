@@ -34,8 +34,8 @@ print("Mixins defined")
 // Test 1: Object with single mixin
 print("Test 1: Single mixin")
 robot: {
-    :[Greetable],
-    name: "RobotA",
+    :[Greetable]
+    name: "RobotA"
     type: "Android"
 }
 
@@ -45,9 +45,9 @@ robot.sayGoodbye()
 // Test 2: Object with multiple mixins
 print("Test 2: Multiple mixins")
 smartRobot: {
-    :[Greetable, Describable],
-    name: "SmartBot",
-    type: "AI Assistant",
+    :[Greetable, Describable]
+    name: "SmartBot"
+    type: "AI Assistant"
     features: "many advanced"
 }
 
@@ -58,10 +58,10 @@ smartRobot.sayGoodbye()
 // Test 3: Mixins with additional properties
 print("Test 3: Mixins with additional properties")
 calculator: {
-    :[Greetable, Calculable],
-    name: "Calculator3000",
-    version: "1.0",
-    brand: "TechCorp",
+    :[Greetable, Calculable]
+    name: "Calculator3000"
+    version: "1.0"
+    brand: "TechCorp"
     
     getVersion: fn() {
         print("Version: " + this.version + " by " + this.brand)
@@ -77,10 +77,10 @@ print("Results: " + result1 + ", " + result2)
 // Test 4: Complex mixin combination
 print("Test 4: All mixins combined")
 superDevice: {
-    :[Greetable, Describable, Calculable],
-    name: "SuperDevice",
-    type: "Multi-purpose Tool",
-    features: "calculation, description, and greeting",
+    :[Greetable, Describable, Calculable]
+    name: "SuperDevice"
+    type: "Multi-purpose Tool"
+    features: "calculation, description, and greeting"
     
     doEverything: fn() {
         this.greet()
@@ -96,9 +96,9 @@ superDevice.doEverything()
 // Test 5: Mixin properties access
 print("Test 5: Mixin property access")
 infoDevice: {
-    :[Describable],
-    name: "InfoBot",
-    type: "Information System",
+    :[Describable]
+    name: "InfoBot"
+    type: "Information System"
     features: "data storage"
 }
 
@@ -107,14 +107,14 @@ print("Mixin info property: " + infoDevice.info)
 // Test 6: Multiple objects with same mixins
 print("Test 6: Multiple objects with same mixins")
 device1: {
-    :[Greetable],
-    name: "Device1",
+    :[Greetable]
+    name: "Device1"
     id: 1
 }
 
 device2: {
-    :[Greetable],
-    name: "Device2", 
+    :[Greetable]
+    name: "Device2"
     id: 2
 }
 

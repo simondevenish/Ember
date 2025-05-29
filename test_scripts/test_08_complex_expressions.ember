@@ -5,24 +5,24 @@ print("=== Testing Complex Expressions ===")
 gameData: {
     player: {
         stats: {
-            health: 100,
-            mana: 50,
+            health: 100
+            mana: 50
             inventory: {
-                weapons: ["sword", "bow"],
+                weapons: ["sword", "bow"]
                 potions: {
-                    health: 5,
+                    health: 5
                     mana: 3
                 }
             }
-        },
+        }
         location: {
-            x: 10,
-            y: 20,
+            x: 10
+            y: 20
             zone: "forest"
         }
-    },
+    }
     settings: {
-        difficulty: "normal",
+        difficulty: "normal"
         volume: 0.8
     }
 }
@@ -52,19 +52,19 @@ print("  Diagonal sum: " + sum)
 
 // Chained method calls
 processor: {
-    name: "DataProcessor",
-    data: [],
+    name: "DataProcessor"
+    data: []
     
     addData: fn(value) {
         print("Adding: " + value)
         this.data = [value]  // Simplified for test
         this
-    },
+    }
     
     transform: fn() {
         print("Transforming data")
         this
-    },
+    }
     
     getResult: fn() {
         print("Getting result from " + this.name)
@@ -90,7 +90,7 @@ calculator2: {
             }
             result
         }
-    },
+    }
     
     factorial: fn(n) {
         if (n <= 1) {
@@ -115,9 +115,9 @@ print("  Combined: " + combined)
 
 // Mixed data type operations
 mixed: {
-    numbers: [1, 2, 3, 4, 5],
-    strings: ["a", "b", "c"],
-    objects: [{ id: 1, name: "first" }, { id: 2, name: "second" }],
+    numbers: [1, 2, 3, 4, 5]
+    strings: ["a", "b", "c"]
+    objects: [{ id: 1 name: "first" }, { id: 2 name: "second" }]
     
     processAll: fn() {
         print("Processing numbers: " + this.numbers)
@@ -165,7 +165,7 @@ print("  Should apply: " + shouldApply)
 
 // Nested function calls with property access
 dataStore: {
-    items: [{ name: "apple", price: 1.50 }, { name: "banana", price: 0.75 }, { name: "orange", price: 2.00 }],
+    items: [{ name: "apple" price: 1.50 }, { name: "banana" price: 0.75 }, { name: "orange" price: 2.00 }]
     
     findByName: fn(searchName) {
         for (i = 0; i < 3; i = i + 1) {
@@ -179,7 +179,7 @@ dataStore: {
         // Work around parser limitation
         items: this.items
         items[1]  // Just return the banana item for testing
-    },
+    }
     
     getTotalValue: fn() {
         total: 0

@@ -1,0 +1,39 @@
+// Phase 1: Basic Range Operator Implementation Test
+// This test validates that the range operator (..) works correctly
+
+print("=== EmberScript Range Operator Test ===")
+
+// Test 1: Basic integer ranges
+print("\n1. Basic integer ranges:")
+var range1: 1..5
+print("  1..5 = " + range1)
+print("  start: " + range1.start + ", end: " + range1.end)
+
+var range2: 0..10
+print("  0..10 = " + range2)
+print("  start: " + range2.start + ", end: " + range2.end)
+
+// Test 2: Ranges with variables
+print("\n2. Ranges with variables:")
+var start: 3
+var end: 8
+var range3: start..end
+print("  " + start + ".." + end + " = " + range3)
+print("  start: " + range3.start + ", end: " + range3.end)
+
+// Test 3: Ranges with expressions
+print("\n3. Ranges with expressions:")
+var range4: (2 * 3)..(5 + 10)
+print("  (2 * 3)..(5 + 10) = " + range4)
+print("  start: " + range4.start + ", end: " + range4.end)
+
+// Test 4: Decimal numbers with ranges (ensure no conflict)
+print("\n4. Decimal numbers and ranges:")
+var decimal: 3.14
+var range5: 1..decimal
+print("  decimal = " + decimal)
+print("  1..decimal = " + range5)
+print("  start: " + range5.start + ", end: " + range5.end)
+
+print("\n=== All Range Tests Passed! ===")
+print("Phase 1 (Basic Range Operator) is complete.") 

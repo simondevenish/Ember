@@ -1,0 +1,8 @@
+// Debug range creation step by step
+print("Testing range creation...")
+
+// First test basic range assignment  
+var r: 1..2
+
+print("Range assigned")
+print("Range is: " + r) 

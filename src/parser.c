@@ -34,10 +34,11 @@ int get_operator_precedence(const char* op_symbol) {
         {"||", 1},
         {"&&", 2},
         {"==", 3}, {"!=", 3},
-        {"<", 4}, {"<=", 4}, {">", 4}, {">=", 4},
+        {"<", 4}, {"<=", 4}, {">", 4}, {">=", 4}, {"..", 4},
         {"+", 5}, {"-", 5},
         {"*", 6}, {"/", 6}, {"%", 6},
     };
+    
     for (size_t i = 0; i < sizeof(precedence_table) / sizeof(precedence_table[0]); i++) {
         if (strcmp(precedence_table[i].symbol, op_symbol) == 0) {
             return precedence_table[i].precedence;
@@ -218,6 +219,15 @@ void free_ast(ASTNode* node) {
             free(node->property_assignment.property);
             free_ast(node->property_assignment.object);
             free_ast(node->property_assignment.value);
+            break;
+        case AST_RANGE:
+            free_ast(node->range.start);
+            free_ast(node->range.end);
+            break;
+        case AST_NAKED_ITERATOR:
+            free(node->naked_iterator.variable_name);
+            free_ast(node->naked_iterator.range);
+            free_ast(node->naked_iterator.body);
             break;
         default:
             fprintf(stderr, "Error: Unknown AST node type\n");
@@ -724,23 +734,44 @@ ASTNode* parse_expression(Parser* parser, int min_precedence) {
                 return NULL;
             }
 
-            // Create a BinaryOp node
-            ASTNode* binary_op = create_ast_node(AST_BINARY_OP);
-            if (!binary_op) {
-                fprintf(stderr, "Error: Memory allocation failed for binary operation node\n");
-                free(operator);
-                free_ast(left);
-                free_ast(right);
-                return NULL;
+            // Check if this is a range operator
+            if (strcmp(operator, "..") == 0) {
+                // Create a Range node instead of BinaryOp
+                ASTNode* range_op = create_ast_node(AST_RANGE);
+                if (!range_op) {
+                    fprintf(stderr, "Error: Memory allocation failed for range operation node\n");
+                    free(operator);
+                    free_ast(left);
+                    free_ast(right);
+                    return NULL;
+                }
+
+                // Hook up start and end
+                range_op->range.start = left;
+                range_op->range.end = right;
+                free(operator); // Don't need to store operator for range
+
+                // That becomes our new left side
+                left = range_op;
+            } else {
+                // Create a BinaryOp node for other operators
+                ASTNode* binary_op = create_ast_node(AST_BINARY_OP);
+                if (!binary_op) {
+                    fprintf(stderr, "Error: Memory allocation failed for binary operation node\n");
+                    free(operator);
+                    free_ast(left);
+                    free_ast(right);
+                    return NULL;
+                }
+
+                // Hook up left, operator, right
+                binary_op->binary_op.left = left;
+                binary_op->binary_op.right = right;
+                binary_op->binary_op.op_symbol = operator;
+
+                // That becomes our new left side
+                left = binary_op;
             }
-
-            // Hook up left, operator, right
-            binary_op->binary_op.left = left;
-            binary_op->binary_op.right = right;
-            binary_op->binary_op.op_symbol = operator;
-
-            // That becomes our new left side
-            left = binary_op;
         }
         // --- C) If it's not assignment or a recognized operator, we stop here ---
         else {
@@ -2209,6 +2240,22 @@ void print_ast(const ASTNode* node, int depth) {
             print_ast(node->property_assignment.object, depth + 1);
             printf("  Value:\n");
             print_ast(node->property_assignment.value, depth + 1);
+            break;
+
+        case AST_RANGE:
+            printf("Range:\n");
+            printf("  Start:\n");
+            print_ast(node->range.start, depth + 1);
+            printf("  End:\n");
+            print_ast(node->range.end, depth + 1);
+            break;
+
+        case AST_NAKED_ITERATOR:
+            printf("Naked Iterator: %s\n", node->naked_iterator.variable_name);
+            printf("  Range:\n");
+            print_ast(node->naked_iterator.range, depth + 1);
+            printf("  Body:\n");
+            print_ast(node->naked_iterator.body, depth + 1);
             break;
 
         default:

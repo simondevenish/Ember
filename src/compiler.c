@@ -169,6 +169,7 @@ static void compile_function_body(ASTNode* node, BytecodeChunk* chunk, SymbolTab
                     case AST_OBJECT_LITERAL:
                     case AST_PROPERTY_ACCESS:
                     case AST_METHOD_CALL:
+                    case AST_RANGE:
                         // These are expressions - compile them without OP_POP
                         compile_expression(statement, chunk, symtab);
                         break;
@@ -210,6 +211,7 @@ static void compile_function_body(ASTNode* node, BytecodeChunk* chunk, SymbolTab
             case AST_OBJECT_LITERAL:
             case AST_PROPERTY_ACCESS:
             case AST_METHOD_CALL:
+            case AST_RANGE:
                 // Expression - compile without OP_POP
                 compile_expression(node, chunk, symtab);
                 break;
@@ -601,6 +603,38 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             compile_if_statement_with_return(node, chunk, symtab);
             break;
         }
+        case AST_RANGE: {
+            // Range expression: start..end  
+            // Create it exactly like a two-property object literal
+            
+            // Create a new object to represent the range
+            emit_byte(chunk, OP_NEW_OBJECT);
+            
+            // Set the 'start' property
+            emit_byte(chunk, OP_DUP);
+            RuntimeValue start_prop;
+            start_prop.type = RUNTIME_VALUE_STRING;
+            start_prop.string_value = strdup("start");
+            emit_constant(chunk, start_prop);
+            compile_expression(node->range.start, chunk, symtab);
+            emit_byte(chunk, OP_SET_PROPERTY);
+            emit_byte(chunk, OP_SWAP);
+            emit_byte(chunk, OP_POP);
+            
+            // Set the 'end' property
+            emit_byte(chunk, OP_DUP);
+            RuntimeValue end_prop;
+            end_prop.type = RUNTIME_VALUE_STRING;
+            end_prop.string_value = strdup("end");
+            emit_constant(chunk, end_prop);
+            compile_expression(node->range.end, chunk, symtab);
+            emit_byte(chunk, OP_SET_PROPERTY);
+            emit_byte(chunk, OP_SWAP);
+            emit_byte(chunk, OP_POP);
+            
+            // The resulting range object is on the stack top
+            break;
+        }
         default:
             // If we see a statement node in an expression context, that's likely a parse mismatch
             fprintf(stderr, "Compiler error: Unexpected node type %d in expression.\n", node->type);
@@ -650,7 +684,8 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
         case AST_OBJECT_LITERAL:
         case AST_PROPERTY_ACCESS:
         case AST_METHOD_CALL:
-        case AST_PROPERTY_ASSIGNMENT: {
+        case AST_PROPERTY_ASSIGNMENT:
+        case AST_RANGE: {
             // Expression statement
             compile_expression(node, chunk, symtab);
             // pop result (unless we want to keep it)
@@ -955,6 +990,7 @@ static void compile_node(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symta
         case AST_PROPERTY_ACCESS:
         case AST_METHOD_CALL:
         case AST_PROPERTY_ASSIGNMENT:
+        case AST_RANGE:
             compile_statement(node, chunk, symtab);
             break;
 

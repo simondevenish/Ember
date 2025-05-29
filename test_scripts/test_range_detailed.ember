@@ -1,0 +1,19 @@
+// Test range object creation and property access
+var range1: 1..10
+print("Range created: " + range1)
+
+// Test accessing range properties
+print("Range start: " + range1.start)
+print("Range end: " + range1.end)
+
+// Test range with variables
+var start: 5
+var end: 15
+var range2: start..end
+print("Variable range start: " + range2.start)
+print("Variable range end: " + range2.end)
+
+// Test range with expressions
+var range3: (2 + 3)..(10 * 2)
+print("Expression range start: " + range3.start)
+print("Expression range end: " + range3.end) 

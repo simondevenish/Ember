@@ -1,0 +1,13 @@
+// Test basic range expressions
+var start: 1
+var end: 5
+var range1: start..end
+
+// Test range with literals
+var range2: 0..10
+
+// Test range in a simple expression
+var midpoint: (5 + 15) / 2
+var range3: midpoint..15
+
+print("Range test completed") 

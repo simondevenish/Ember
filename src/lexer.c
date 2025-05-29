@@ -101,40 +101,24 @@ char* lexer_read_identifier(Lexer* lexer) {
 
 
 Token lexer_next_token(Lexer* lexer) {
-    // Handle indentation at the start of lines
+    // Handle indentation at the start of a line
     if (lexer->at_line_start) {
-        return lexer_handle_indentation(lexer);
-    }
-    
-    // Handle pending DEDENT tokens
-    if (lexer->pending_dedents && lexer->dedent_count > 0) {
-        lexer->dedent_count--;
-        if (lexer->dedent_count == 0) {
-            lexer->pending_dedents = false;
+        Token indent_token = lexer_handle_indentation(lexer);
+        if (indent_token.type != TOKEN_EOF) {
+            return indent_token;
         }
-        return (Token){TOKEN_DEDENT, NULL, lexer->line, lexer->column};
     }
-    
+
     lexer_skip_whitespace_and_comments(lexer);
 
-    // End of input - emit any remaining DEDENT tokens
     if (lexer->current_char == '\0') {
-        if (lexer->indent_stack_size > 1) {
-            // Emit DEDENT tokens to close all indentation levels
-            lexer->dedent_count = lexer->indent_stack_size - 1;
-            lexer->indent_stack_size = 1;
-            if (lexer->dedent_count > 0) {
-                lexer->pending_dedents = true;
-                lexer->dedent_count--;
-                return (Token){TOKEN_DEDENT, NULL, lexer->line, lexer->column};
-            }
-        }
         return (Token){TOKEN_EOF, NULL, lexer->line, lexer->column};
     }
 
-    // Handle newlines as significant tokens for indentation
+    // Handle newlines
     if (lexer->current_char == '\n') {
         lexer_advance(lexer);
+        lexer->at_line_start = true;
         return (Token){TOKEN_NEWLINE, NULL, lexer->line, lexer->column};
     }
 
@@ -156,9 +140,34 @@ Token lexer_next_token(Lexer* lexer) {
     // Numbers
     if (isdigit(lexer->current_char)) {
         int start = lexer->position;
-        while (isdigit(lexer->current_char) || lexer->current_char == '.') {
+        
+        // Parse digits
+        while (isdigit(lexer->current_char)) {
             lexer_advance(lexer);
         }
+        
+        // Check for decimal point, but be careful about range operator
+        if (lexer->current_char == '.') {
+            // Look ahead to see if this is a range operator (..)
+            if (lexer_peek(lexer) == '.') {
+                // This is a range operator, don't include the decimal point
+                // Just return the integer part
+                int length = lexer->position - start;
+                char* number = (char*)malloc(length + 1);
+                strncpy(number, &lexer->source[start], length);
+                number[length] = '\0';
+                return (Token){TOKEN_NUMBER, number, lexer->line, lexer->column};
+            } else {
+                // This is a decimal point, include it and continue parsing
+                lexer_advance(lexer); // consume the '.'
+                
+                // Parse fractional part
+                while (isdigit(lexer->current_char)) {
+                    lexer_advance(lexer);
+                }
+            }
+        }
+        
         int length = lexer->position - start;
         char* number = (char*)malloc(length + 1);
         strncpy(number, &lexer->source[start], length);
@@ -225,7 +234,8 @@ Token lexer_next_token(Lexer* lexer) {
     // Multi-character operators
     if (lexer->current_char == '=' || lexer->current_char == '!' ||
         lexer->current_char == '<' || lexer->current_char == '>' ||
-        lexer->current_char == '&' || lexer->current_char == '|') {
+        lexer->current_char == '&' || lexer->current_char == '|' ||
+        lexer->current_char == '.') {
         char first_char = lexer->current_char;
         lexer_advance(lexer);
 
@@ -250,12 +260,23 @@ Token lexer_next_token(Lexer* lexer) {
             operator[1] = '|';
             operator[2] = '\0';
             return (Token){TOKEN_OPERATOR, operator, lexer->line, lexer->column};
+        } else if (first_char == '.' && lexer->current_char == '.') { // .. (range operator)
+            lexer_advance(lexer);
+            char* operator = (char*)malloc(3);
+            operator[0] = '.';
+            operator[1] = '.';
+            operator[2] = '\0';
+            return (Token){TOKEN_OPERATOR, operator, lexer->line, lexer->column};
         } else {
-            // Single-character operator (e.g., =, <, >, !)
+            // Single-character operator (e.g., =, <, >, !, .)
             char* operator = (char*)malloc(2);
             operator[0] = first_char;
             operator[1] = '\0';
-            return (Token){TOKEN_OPERATOR, operator, lexer->line, lexer->column};
+            if (first_char == '.') {
+                return (Token){TOKEN_PUNCTUATION, operator, lexer->line, lexer->column};
+            } else {
+                return (Token){TOKEN_OPERATOR, operator, lexer->line, lexer->column};
+            }
         }
     }
 
@@ -270,7 +291,7 @@ Token lexer_next_token(Lexer* lexer) {
         operator[0] = current_char;
         operator[1] = '\0';
         return (Token){TOKEN_OPERATOR, operator, lexer->line, lexer->column};
-    } else if (strchr("(){}[],;.:", current_char)) {
+    } else if (strchr("(){}[],;:", current_char)) {
         // Punctuation
         char* punctuation = (char*)malloc(2);
         punctuation[0] = current_char;

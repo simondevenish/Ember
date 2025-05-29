@@ -1,0 +1,3 @@
+// Simple range test
+var range: 1..5
+print("Range: " + range) 

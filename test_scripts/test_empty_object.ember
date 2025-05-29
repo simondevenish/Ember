@@ -1,0 +1,3 @@
+// Test empty object creation
+var obj: {}
+print("Empty object: " + obj) 

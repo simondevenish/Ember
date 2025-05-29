@@ -25,7 +25,9 @@ typedef enum {
     AST_OBJECT_LITERAL,  // Object literal: {a: 1, b: 2}
     AST_PROPERTY_ACCESS, // Property access: obj.prop
     AST_METHOD_CALL,     // Method call: obj.method()
-    AST_PROPERTY_ASSIGNMENT  // Property assignment: obj.prop = value
+    AST_PROPERTY_ASSIGNMENT,  // Property assignment: obj.prop = value
+    AST_RANGE,           // Range expression: 1..10
+    AST_NAKED_ITERATOR   // Naked iterator: i: 0..5 (body)
 } ASTNodeType;
 
 // Variable Declaration Types for new colon syntax
@@ -68,6 +70,8 @@ typedef struct ASTNode {
         struct { struct ASTNode* object; char* property; } property_access; // For AST_PROPERTY_ACCESS
         struct { struct ASTNode* object; char* method; struct ASTNode** arguments; int argument_count; } method_call; // For AST_METHOD_CALL
         struct { struct ASTNode* object; char* property; struct ASTNode* value; } property_assignment; // For AST_PROPERTY_ASSIGNMENT
+        struct { struct ASTNode* start; struct ASTNode* end; } range; // For AST_RANGE: start..end
+        struct { char* variable_name; struct ASTNode* range; struct ASTNode* body; } naked_iterator; // For AST_NAKED_ITERATOR: var: range (body)
     };
 } ASTNode;
 

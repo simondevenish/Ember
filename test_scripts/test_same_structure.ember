@@ -1,0 +1,12 @@
+// Test object with same structure as range
+var obj: {
+  start: 1
+}
+
+// Compare with range 
+var range: 1..2
+
+print("Object: " + obj)
+print("Range: " + range)
+
+print("Object start: " + obj.start) 

@@ -1,0 +1,7 @@
+// Test manual object creation with single property
+var obj: {
+  start: 1
+}
+
+print("Manual object: " + obj)
+print("Start property: " + obj.start) 

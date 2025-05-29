@@ -1,0 +1,9 @@
+// Test basic object creation and property access
+var obj: {
+  name: "test"
+  value: 42
+}
+
+print("Object: " + obj)
+print("Name: " + obj.name)
+print("Value: " + obj.value) 

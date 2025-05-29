@@ -811,8 +811,14 @@ int vm_run(VM* vm) {
                 RuntimeValue b = vm_pop(vm);
                 RuntimeValue a = vm_pop(vm);
 
+                // Handle null values gracefully
+                if (a.type == RUNTIME_VALUE_NULL || b.type == RUNTIME_VALUE_NULL) {
+                    RuntimeValue result;
+                    result.type = RUNTIME_VALUE_NULL;
+                    vm_push(vm, result);
+                }
                 // 1) string + string
-                if (a.type == RUNTIME_VALUE_STRING && b.type == RUNTIME_VALUE_STRING) {
+                else if (a.type == RUNTIME_VALUE_STRING && b.type == RUNTIME_VALUE_STRING) {
                     size_t lenA = strlen(a.string_value);
                     size_t lenB = strlen(b.string_value);
                     char* newStr = (char*)malloc(lenA + lenB + 1);
@@ -889,7 +895,7 @@ int vm_run(VM* vm) {
                 }
                 // 5) fallback error
                 else {
-                    fprintf(stderr, "VM Error: OP_ADD cannot handle these operand types.\n");
+                    fprintf(stderr, "VM Error: OP_ADD cannot handle these operand types: %d + %d.\n", a.type, b.type);
                     return 1;
                 }
                 break;
@@ -1230,62 +1236,60 @@ int vm_run(VM* vm) {
             }
 
             case OP_RETURN: {
-                // For our simple function call implementation, we need to:
-                // 1. Check if there's a return value before the return marker
-                // 2. Pop the return IP marker from the stack
-                // 3. Restore the instruction pointer
-                // 4. Push the return value back (if any)
-                
+                // Simplified return implementation to avoid infinite loops
                 printf("VM DEBUG: OP_RETURN - stack size: %ld\n", vm->stack_top - vm->stack);
                 
-                // Check if we have anything on the stack
                 if (vm->stack_top <= vm->stack) {
-                    // No values on stack - this could be end of main program or empty function return
+                    // Empty stack - end of program
                     printf("VM DEBUG: Empty stack, ending program\n");
                     return 0;
                 }
                 
-                // Check if there are at least 2 values on the stack (return value + return marker)
-                if (vm->stack_top - vm->stack >= 2) {
-                    // Look at the top two values to see if we have a return value before the marker
-                    RuntimeValue topValue = vm_peek(vm, 0);      // Value at top
-                    RuntimeValue secondValue = vm_peek(vm, 1);   // Value below top
-                    
-                    if (secondValue.type == RUNTIME_VALUE_NUMBER && topValue.type != RUNTIME_VALUE_NUMBER) {
-                        // We have a return value on top and a return marker below it
-                        RuntimeValue returnValue = vm_pop(vm);
-                        RuntimeValue returnMarker = vm_pop(vm);
-                        
-                        int returnOffset = (int)returnMarker.number_value;
-                        vm->ip = vm->chunk->code + returnOffset;
-                        
-                        // Push the return value back onto the stack
-                        vm_push(vm, returnValue);
-                        
-                        printf("VM DEBUG: Returning to IP offset %d with return value\n", returnOffset);
-                        break;
+                // Look for a return marker (should be a number representing an IP offset)
+                RuntimeValue return_value = {.type = RUNTIME_VALUE_NULL}; // Default return value
+                RuntimeValue* return_marker = NULL;
+                int marker_index = -1;
+                
+                // Search the stack from top to bottom for a return marker
+                for (int i = 0; i < (vm->stack_top - vm->stack); i++) {
+                    RuntimeValue val = vm_peek(vm, i);
+                    if (val.type == RUNTIME_VALUE_NUMBER) {
+                        int potential_offset = (int)val.number_value;
+                        // Check if this looks like a valid IP offset
+                        if (potential_offset >= 0 && potential_offset < vm->chunk->code_count) {
+                            marker_index = i;
+                            return_marker = &val;
+                            break;
+                        }
                     }
                 }
                 
-                // Single value on stack - check if it's a return marker
-                RuntimeValue returnMarker = vm_pop(vm);
-                printf("VM DEBUG: Popped value type: %d\n", returnMarker.type);
-                
-                if (returnMarker.type == RUNTIME_VALUE_NUMBER) {
-                    // This is a return marker - restore the instruction pointer
-                    int returnOffset = (int)returnMarker.number_value;
-                    vm->ip = vm->chunk->code + returnOffset;
+                if (return_marker) {
+                    // Found return marker
+                    int return_offset = (int)return_marker->number_value;
                     
-                    // Push null as the return value (function returned nothing)
-                    RuntimeValue nullReturnValue = {.type = RUNTIME_VALUE_NULL};
-                    vm_push(vm, nullReturnValue);
+                    // If there's a value above the marker, use it as return value
+                    if (marker_index > 0) {
+                        return_value = vm_pop(vm); // Get the return value
+                    }
                     
-                    printf("VM DEBUG: Returning to IP offset %d with null return value\n", returnOffset);
+                    // Pop everything up to and including the return marker
+                    for (int i = 0; i <= marker_index; i++) {
+                        if (i < marker_index || marker_index == 0) {
+                            vm_pop(vm); // Pop intermediate values or the marker itself if it was at top
+                        }
+                    }
+                    
+                    // Restore instruction pointer
+                    vm->ip = vm->chunk->code + return_offset;
+                    printf("VM DEBUG: Returning to IP offset %d\n", return_offset);
+                    
+                    // Push the return value
+                    vm_push(vm, return_value);
                 } else {
-                    // This wasn't a return marker, it's some other value
-                    // Put it back on the stack and continue execution
-                    vm_push(vm, returnMarker);
-                    printf("VM DEBUG: Not a return marker, continuing execution\n");
+                    // No return marker found - this might be end of main program
+                    printf("VM DEBUG: No return marker found, ending program\n");
+                    return 0;
                 }
                 
                 break;

@@ -9,7 +9,11 @@
 #include "parser.h"  // For ASTNodeType, ASTNode, etc.
 #include "utils.h"
 
+// Forward declarations
+static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab);
+static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab);
 static void compile_node(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab);
+static void compile_function_body(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab);
 
 /* -------------------------------------------------------
    Symbol Table Implementation
@@ -135,6 +139,84 @@ static void emit_constant(BytecodeChunk* chunk, RuntimeValue val) {
     int index = add_constant(chunk, val);
     emit_byte(chunk, OP_LOAD_CONST);
     emit_byte(chunk, (uint8_t)index);
+}
+
+/* -------------------------------------------------------
+   Special function body compiler that preserves last expression
+   ------------------------------------------------------- */
+static void compile_function_body(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab) {
+    if (!node) return;
+    
+    if (node->type == AST_BLOCK) {
+        // For function bodies, compile all statements except the last one normally
+        // The last statement should be treated as a return value
+        int statement_count = node->block.statement_count;
+        
+        for (int i = 0; i < statement_count; i++) {
+            ASTNode* statement = node->block.statements[i];
+            
+            if (i == statement_count - 1) {
+                // Last statement - treat as expression that should remain on stack
+                switch (statement->type) {
+                    case AST_BINARY_OP:
+                    case AST_FUNCTION_CALL:
+                    case AST_ARRAY_LITERAL:
+                    case AST_INDEX_ACCESS:
+                    case AST_UNARY_OP:
+                    case AST_LITERAL:
+                    case AST_VARIABLE:
+                    case AST_OBJECT_LITERAL:
+                    case AST_PROPERTY_ACCESS:
+                    case AST_METHOD_CALL:
+                        // These are expressions - compile them without OP_POP
+                        compile_expression(statement, chunk, symtab);
+                        break;
+                    default:
+                        // Regular statements - compile normally and push null as return value
+                        compile_statement(statement, chunk, symtab);
+                        // Push null as return value since this statement doesn't produce a value
+                        RuntimeValue null_val;
+                        null_val.type = RUNTIME_VALUE_NULL;
+                        emit_constant(chunk, null_val);
+                        break;
+                }
+            } else {
+                // Not the last statement - compile normally
+                compile_node(statement, chunk, symtab);
+            }
+        }
+        
+        if (statement_count == 0) {
+            // Empty function body - return null
+            RuntimeValue null_val;
+            null_val.type = RUNTIME_VALUE_NULL;
+            emit_constant(chunk, null_val);
+        }
+    } else {
+        // Single statement function body
+        switch (node->type) {
+            case AST_BINARY_OP:
+            case AST_FUNCTION_CALL:
+            case AST_ARRAY_LITERAL:
+            case AST_INDEX_ACCESS:
+            case AST_UNARY_OP:
+            case AST_LITERAL:
+            case AST_VARIABLE:
+            case AST_OBJECT_LITERAL:
+            case AST_PROPERTY_ACCESS:
+            case AST_METHOD_CALL:
+                // Expression - compile without OP_POP
+                compile_expression(node, chunk, symtab);
+                break;
+            default:
+                // Statement - compile normally and push null
+                compile_statement(node, chunk, symtab);
+                RuntimeValue null_val;
+                null_val.type = RUNTIME_VALUE_NULL;
+                emit_constant(chunk, null_val);
+                break;
+        }
+    }
 }
 
 /* -------------------------------------------------------
@@ -750,7 +832,7 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             }
 
             // Compile the function body
-            compile_statement(node->function_def.body, chunk, symtab);
+            compile_function_body(node->function_def.body, chunk, symtab);
 
             // Emit return at the end of function
             emit_byte(chunk, OP_RETURN);

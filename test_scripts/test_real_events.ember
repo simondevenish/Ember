@@ -1,0 +1,7 @@
+// Real Event System Test
+print("Testing actual event syntax...")
+
+// Test the fire syntax
+fire["TestEvent"]
+
+print("Event fired successfully!") 

@@ -27,7 +27,12 @@ typedef enum {
     AST_METHOD_CALL,     // Method call: obj.method()
     AST_PROPERTY_ASSIGNMENT,  // Property assignment: obj.prop = value
     AST_RANGE,           // Range expression: 1..10
-    AST_NAKED_ITERATOR   // Naked iterator: i: 0..5 (body)
+    AST_NAKED_ITERATOR,  // Naked iterator: i: 0..5 (body)
+    AST_EVENT_BINDING,   // Event binding: fn() <- ["EventName" {...} | ...]
+    AST_EVENT_BROADCAST, // Event broadcast: fire["EventName" {...} | ...]
+    AST_EVENT_CONDITION, // Event condition: {if condition}
+    AST_EVENT_FILTER,    // Event filter: | filter1, filter2
+    AST_FILTER_EXPRESSION // Filter expression: type(player), health(>50), etc.
 } ASTNodeType;
 
 // Variable Declaration Types for new colon syntax
@@ -72,6 +77,11 @@ typedef struct ASTNode {
         struct { struct ASTNode* object; char* property; struct ASTNode* value; } property_assignment; // For AST_PROPERTY_ASSIGNMENT
         struct { struct ASTNode* start; struct ASTNode* end; } range; // For AST_RANGE: start..end
         struct { char* variable_name; struct ASTNode* iterable; struct ASTNode* body; } naked_iterator; // For AST_NAKED_ITERATOR: var: iterable (body)
+        struct { char* function_name; char** parameters; int parameter_count; char* event_name; struct ASTNode* condition; struct ASTNode* filter; struct ASTNode* body; } event_binding; // For AST_EVENT_BINDING: fn() <- ["EventName" {...} | ...]
+        struct { char* event_name; struct ASTNode* condition; struct ASTNode* filter; struct ASTNode* body; } event_broadcast; // For AST_EVENT_BROADCAST: fire["EventName" {...} | ...]
+        struct { struct ASTNode* condition_expr; } event_condition; // For AST_EVENT_CONDITION: {if condition}
+        struct { struct ASTNode** filters; int filter_count; } event_filter; // For AST_EVENT_FILTER: | filter1, filter2
+        struct { char* filter_type; char* parameter; char* comparison_op; struct ASTNode* value; } filter_expression; // For AST_FILTER_EXPRESSION: type(player), health(>50), etc.
     };
 } ASTNode;
 
@@ -346,5 +356,21 @@ ASTNode* parse_property_assignment(Parser* parser, ASTNode* property_access);
  * @return ASTNode* The parsed function expression node.
  */
 ASTNode* parse_function_expression(Parser* parser);
+
+/**
+ * @brief Parse an event binding (function_name: fn() <- ["EventName" {...} | ...]).
+ * 
+ * @param parser The parser instance.
+ * @return ASTNode* The parsed event binding node.
+ */
+ASTNode* parse_event_binding(Parser* parser);
+
+/**
+ * @brief Parse an event broadcast (fire["EventName" {...} | ...]).
+ * 
+ * @param parser The parser instance.
+ * @return ASTNode* The parsed event broadcast node.
+ */
+ASTNode* parse_event_broadcast(Parser* parser);
 
 #endif // PARSER_H

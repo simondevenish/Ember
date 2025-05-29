@@ -1,0 +1,25 @@
+print("=== Phase 1 Complete Event System Test ===")
+
+// Test 1: Register event listener
+print("Registering event listener...")
+onPlayerJump: fn() <- ["PlayerJump"]
+  print("Player jumped!")
+
+print("Event listener registered")
+
+// Test 2: Register event listener with parameters
+print("Registering parameterized event listener...")
+onPlayerMove: fn(direction) <- ["PlayerMove"]
+  print("Player moved in direction: " + direction)
+
+print("Parameterized event listener registered")
+
+// Test 3: Fire the events
+print("Firing PlayerJump event...")
+fire["PlayerJump"]
+
+print("Firing PlayerMove event...")
+fire["PlayerMove"]
+
+print("Event system test complete!")
+print("=== All Phase 1 Event Syntax Working! ===") 

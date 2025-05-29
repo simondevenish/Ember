@@ -1,0 +1,35 @@
+// Complete Event System Test - Phase 1
+print("=== Testing Complete Event System ===")
+
+// Test 1: Define an event listener function
+print("1. Defining event listener...")
+
+// Event listener function that responds to "PlayerJump" event
+onPlayerJump: fn() <- ["PlayerJump"]
+  print("Player has jumped!")
+
+print("2. Event listener defined successfully")
+
+// Test 2: Fire the event to trigger the listener
+print("3. Firing the PlayerJump event...")
+
+fire["PlayerJump"]
+
+print("4. Event fired successfully")
+
+// Test 3: More complex event with condition
+print("5. Testing event with condition...")
+
+var isGameRunning: true
+
+onGameEnd: fn() <- ["GameEnd" {if !isGameRunning}]
+  print("Game has ended!")
+
+// This should not trigger since isGameRunning is true
+fire["GameEnd"]
+
+// Change condition and fire again
+isGameRunning = false
+fire["GameEnd"]
+
+print("=== Event System Test Complete ===") 

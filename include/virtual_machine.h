@@ -82,7 +82,14 @@ typedef enum {
 
     // Unused placeholders
     OP_THROW,            // Throw an error
-    OP_TRY_CATCH         // Possibly a try-catch block in the future??
+    OP_TRY_CATCH,        // Possibly a try-catch block in the future??
+    
+    // Event System Operations
+    OP_EVENT_BIND,       // Register event listener
+    OP_EVENT_FIRE,       // Broadcast event
+    OP_EVENT_FILTER,     // Apply filter to event
+    OP_EVENT_CONDITION,  // Evaluate event condition
+    OP_EVENT_PARAM       // Access event parameter
 } OpCode;
 
 /**

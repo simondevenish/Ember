@@ -1,0 +1,7 @@
+print("Testing just event binding...")
+
+// Basic event binding
+onPlayerJump: fn() <- ["PlayerJump"]
+  print("Player jumped!")
+
+print("Event binding test complete!") 

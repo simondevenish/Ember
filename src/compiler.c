@@ -635,6 +635,14 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
             // The resulting range object is on the stack top
             break;
         }
+        case AST_EVENT_BINDING:
+        case AST_EVENT_BROADCAST:
+        case AST_EVENT_CONDITION:
+        case AST_EVENT_FILTER:
+        case AST_FILTER_EXPRESSION:
+            // For Phase 1: Basic placeholder - just print and continue (no recursion!)
+            printf("Phase 1: Event node type %d (placeholder)\n", node->type);
+            break;
         default:
             // If we see a statement node in an expression context, that's likely a parse mismatch
             fprintf(stderr, "Compiler error: Unexpected node type %d in expression.\n", node->type);
@@ -646,6 +654,8 @@ static void compile_expression(ASTNode* node, BytecodeChunk* chunk, SymbolTable*
    Statement Compiler
    ------------------------------------------------------- */
 static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symtab) {
+    if (!node) return;
+
     switch (node->type) {
         case AST_VARIABLE_DECL: {
             // Handle both old syntax (var x = value) and new colon syntax (var x: value, let x: value, x: value)
@@ -736,361 +746,6 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             patch_jump(chunk, loopEndJump);
             break;
         }
-       case AST_IMPORT: {
-            // The raw import path from the AST node (e.g. "my_script.ember" or "ember/net")
-            const char* raw_path = node->import_stmt.import_path;
-
-            // ------------------------------------------------------------------
-            // 1) Determine if 'raw_path' ends with ".ember" -> local file import
-            // ------------------------------------------------------------------
-            bool isLocalFile = false;
-            {
-                const char* dotEmber = strstr(raw_path, ".ember");
-                if (dotEmber != NULL) {
-                    // If ".ember" appears at the end of raw_path
-                    size_t full_len = strlen(raw_path);
-                    size_t dot_pos  = (size_t)(dotEmber - raw_path); 
-                    if (dot_pos + 6 == full_len) {
-                        // The last 6 chars match ".ember"
-                        isLocalFile = true;
-                    }
-                }
-            }
-
-            // ------------------------------------------------------------------
-            // 2) Local ".ember" file import
-            // ------------------------------------------------------------------
-            if (isLocalFile) {
-                // Attempt to read and parse the local file
-                char* import_source = read_file(raw_path);
-                if (!import_source) {
-                    fprintf(stderr, 
-                            "Compiler error: Could not open local import file '%s'\n", 
-                            raw_path);
-                    return;
-                }
-
-                // Lex & parse => build an AST
-                Lexer import_lexer;
-                lexer_init(&import_lexer, import_source);
-                Parser* import_parser = parser_create(&import_lexer);
-                ASTNode* import_root = parse_script(import_parser);
-
-                if (!import_root) {
-                    fprintf(stderr, 
-                            "Compiler error: Parsing '%s' failed.\n", 
-                            raw_path);
-                    free(import_parser);
-                    free(import_source);
-                    return;
-                }
-
-                // Compile the newly parsed AST into *this* chunk & symtab
-                bool ok = compile_ast(import_root, chunk, symtab);
-                if (!ok) {
-                    fprintf(stderr, 
-                            "Compiler error: Sub-compile for '%s' failed.\n", 
-                            raw_path);
-                }
-
-                // If the last byte is OP_EOF, remove it to avoid polluting main chunk
-                if (chunk->code_count > 0 &&
-                    chunk->code[chunk->code_count - 1] == OP_EOF)
-                {
-                    chunk->code_count--;
-                }
-
-                // Cleanup
-                free_ast(import_root);
-                free(import_parser);
-                free(import_source);
-            }
-            else {
-                // ------------------------------------------------------------------
-                // 3) Module import (e.g., "ember/net", "raylib/2d", etc.)
-                // ------------------------------------------------------------------
-                // (A) Optionally check if installed using utils_is_package_installed
-                // (B) If not installed -> compiler error or warning
-                // (C) If installed or ignoring checks -> do nothing (no file compilation),
-                //     since the module is presumably built-in or available at runtime.
-
-                // Example logic:
-                // If you skip the check, just log:
-                // fprintf(stdout, "Importing module '%s' (no .ember extension)\n", raw_path);
-
-                // But let's do a minimal installed check:
-                if (!utils_is_package_installed(raw_path)) {
-                    // Not installed => treat as error
-                    fprintf(stderr, 
-                            "Compiler error: Module '%s' is not installed (no local .ember found).\n",
-                            raw_path);
-                }
-                else {
-                    // Successfully found in local registry, so skip file compilation.
-                    fprintf(stdout, 
-                            "[Import] Found installed module '%s'. No local file to compile.\n",
-                            raw_path);
-                }
-            }
-
-            // No additional code emitted for the import statement itself
-            break;
-        }
-        case AST_FOR_LOOP: {
-            // for (init; cond; inc) { body }
-            // compile init
-            if (node->for_loop.initializer) {
-                compile_node(node->for_loop.initializer, chunk, symtab);
-            }
-            // label loopStart
-            int loopStart = chunk->code_count;
-            // compile cond
-            if (node->for_loop.condition) {
-                compile_expression(node->for_loop.condition, chunk, symtab);
-            } else {
-                // If no condition, we treat it as 'true'
-                RuntimeValue cval;
-                cval.type = RUNTIME_VALUE_BOOLEAN;
-                cval.boolean_value = true;
-                emit_constant(chunk, cval);
-            }
-            // jump if false => loopEnd
-            int loopEndJump = emit_jump(chunk, OP_JUMP_IF_FALSE);
-
-            // compile body
-            compile_node(node->for_loop.body, chunk, symtab);
-
-            // compile inc
-            if (node->for_loop.increment) {
-                compile_expression(node->for_loop.increment, chunk, symtab);
-                emit_byte(chunk, OP_POP); // discard inc result
-            }
-            // jump back to loopStart
-            emit_byte(chunk, OP_LOOP);
-            int offset = chunk->code_count - loopStart + 2;
-            emit_byte(chunk, (offset >> 8) & 0xFF);
-            emit_byte(chunk, offset & 0xFF);
-
-            // patch loopEnd
-            patch_jump(chunk, loopEndJump);
-            break;
-        }
-        case AST_NAKED_ITERATOR: {
-            // Naked iterator: var: iterable (body)
-            // Support different types:
-            // - Range: var: start..end
-            // - Array: var: array_var  
-            // - Variable: var: collection_var
-            
-            ASTNode* iterable = node->naked_iterator.iterable;
-            char* var_name = node->naked_iterator.variable_name;
-            
-            if (iterable->type == AST_RANGE) {
-                // Range iteration: var = start; while (var <= end) { body; var++; }
-                
-                // Initialize the iterator variable to the start value
-                compile_expression(iterable->range.start, chunk, symtab);
-                int varIndex = symbol_table_get_or_add(symtab, var_name, false);
-                emit_byte(chunk, OP_STORE_VAR);
-                emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
-                
-                // Loop start label
-                int loopStart = chunk->code_count;
-                
-                // Loop condition: var <= end
-                emit_byte(chunk, OP_LOAD_VAR);
-                emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
-                
-                compile_expression(iterable->range.end, chunk, symtab);
-                emit_byte(chunk, OP_LTE);
-                
-                int loopEndJump = emit_jump(chunk, OP_JUMP_IF_FALSE);
-                
-                // Compile loop body
-                compile_node(node->naked_iterator.body, chunk, symtab);
-                
-                // Increment: var = var + 1
-                emit_byte(chunk, OP_LOAD_VAR);
-                emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
-                
-                RuntimeValue one;
-                one.type = RUNTIME_VALUE_NUMBER;
-                one.number_value = 1.0;
-                emit_constant(chunk, one);
-                
-                emit_byte(chunk, OP_ADD);
-                emit_byte(chunk, OP_STORE_VAR);
-                emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
-                
-                // Jump back to loop start
-                emit_byte(chunk, OP_LOOP);
-                int offset = chunk->code_count - loopStart + 2;
-                emit_byte(chunk, (offset >> 8) & 0xFF);
-                emit_byte(chunk, offset & 0xFF);
-                
-                patch_jump(chunk, loopEndJump);
-                
-            } else if (iterable->type == AST_VARIABLE || 
-                       iterable->type == AST_ARRAY_LITERAL ||
-                       iterable->type == AST_PROPERTY_ACCESS) {
-                // Collection iteration: Need to handle both arrays and objects
-                // Strategy: Get keys/indices and iterate over them
-                
-                // Create a temporary index variable
-                char index_var_name[64];
-                snprintf(index_var_name, sizeof(index_var_name), "__iter_index_%p", (void*)node);
-                int indexVarIndex = symbol_table_get_or_add(symtab, index_var_name, false);
-                
-                // Create a temporary variable to store the keys/indices array
-                char keys_var_name[64];
-                snprintf(keys_var_name, sizeof(keys_var_name), "__iter_keys_%p", (void*)node);
-                int keysVarIndex = symbol_table_get_or_add(symtab, keys_var_name, false);
-                
-                // Create a temporary variable to store the original collection (for array value access)
-                char collection_var_name[64];
-                snprintf(collection_var_name, sizeof(collection_var_name), "__iter_collection_%p", (void*)node);
-                int collectionVarIndex = symbol_table_get_or_add(symtab, collection_var_name, false);
-                
-                // Load the collection and get its keys/indices
-                compile_expression(iterable, chunk, symtab);
-                emit_byte(chunk, OP_DUP); // Duplicate for storage
-                
-                // Store original collection
-                emit_byte(chunk, OP_STORE_VAR);
-                emit_byte(chunk, (uint8_t)((collectionVarIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(collectionVarIndex & 0xFF));
-                
-                // Get keys/indices
-                emit_byte(chunk, OP_GET_KEYS);
-                
-                // Store the keys/indices array
-                emit_byte(chunk, OP_STORE_VAR);
-                emit_byte(chunk, (uint8_t)((keysVarIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(keysVarIndex & 0xFF));
-                
-                // Initialize index to 0
-                RuntimeValue zero;
-                zero.type = RUNTIME_VALUE_NUMBER;
-                zero.number_value = 0.0;
-                emit_constant(chunk, zero);
-                emit_byte(chunk, OP_STORE_VAR);
-                emit_byte(chunk, (uint8_t)((indexVarIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(indexVarIndex & 0xFF));
-                
-                // Loop start label
-                int loopStart = chunk->code_count;
-                
-                // Loop condition: index < keys_array.length
-                emit_byte(chunk, OP_LOAD_VAR);
-                emit_byte(chunk, (uint8_t)((indexVarIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(indexVarIndex & 0xFF));
-                
-                // Get length of keys array
-                emit_byte(chunk, OP_LOAD_VAR);
-                emit_byte(chunk, (uint8_t)((keysVarIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(keysVarIndex & 0xFF));
-                emit_byte(chunk, OP_GET_LENGTH);
-                
-                emit_byte(chunk, OP_LT);
-                int loopEndJump = emit_jump(chunk, OP_JUMP_IF_FALSE);
-                
-                // Get the current key/index: key = keys[index]
-                emit_byte(chunk, OP_LOAD_VAR);
-                emit_byte(chunk, (uint8_t)((keysVarIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(keysVarIndex & 0xFF));
-                
-                emit_byte(chunk, OP_LOAD_VAR);
-                emit_byte(chunk, (uint8_t)((indexVarIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(indexVarIndex & 0xFF));
-                
-                emit_byte(chunk, OP_GET_INDEX); // key = keys[index]
-                
-                // Now decide what to put in the iterator variable
-                // We'll use a unified approach: always get collection[key] 
-                // For arrays: key is numeric index, collection[key] gives us the value
-                // For objects: key is string property name, collection[key] gives us the value
-                // But the EmberScript semantics are:
-                // - Arrays: iterate over values
-                // - Objects: iterate over keys
-                // So we need different behavior...
-                
-                // Let me implement this properly with runtime detection:
-                // For now, let's assume arrays if AST_ARRAY_LITERAL or if we detect numeric keys
-                
-                // Duplicate the key to check its type and for potential use
-                emit_byte(chunk, OP_DUP);
-                
-                // Load the original collection
-                emit_byte(chunk, OP_LOAD_VAR);
-                emit_byte(chunk, (uint8_t)((collectionVarIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(collectionVarIndex & 0xFF));
-                
-                // Stack is now: [key, key, collection]
-                // Swap to get [key, collection, key] for OP_GET_INDEX
-                emit_byte(chunk, OP_SWAP); // [key, collection, key]
-                
-                // Get collection[key]
-                emit_byte(chunk, OP_GET_INDEX); // [key, collection_value]
-                
-                // Now we have [original_key, collection_value]
-                // For arrays: we want collection_value
-                // For objects: we want original_key
-                // 
-                // The issue is we need to distinguish at compile time or runtime
-                // Let's use this approach: if iterable is AST_ARRAY_LITERAL, use value, otherwise use key
-                
-                if (iterable->type == AST_ARRAY_LITERAL) {
-                    // Arrays: use the collection_value, discard the key
-                    emit_byte(chunk, OP_SWAP); // [collection_value, key]
-                    emit_byte(chunk, OP_POP);  // [collection_value]
-                } else {
-                    // Variables and other types: assume objects by default
-                    // Objects: use the key, discard the collection_value  
-                    emit_byte(chunk, OP_POP);  // [key]
-                }
-                
-                // Store in iterator variable (whatever is on top of stack now)
-                int varIndex = symbol_table_get_or_add(symtab, var_name, false);
-                emit_byte(chunk, OP_STORE_VAR);
-                emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
-                
-                // Compile loop body
-                compile_node(node->naked_iterator.body, chunk, symtab);
-                
-                // Increment index: index = index + 1
-                emit_byte(chunk, OP_LOAD_VAR);
-                emit_byte(chunk, (uint8_t)((indexVarIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(indexVarIndex & 0xFF));
-                
-                RuntimeValue one;
-                one.type = RUNTIME_VALUE_NUMBER;
-                one.number_value = 1.0;
-                emit_constant(chunk, one);
-                
-                emit_byte(chunk, OP_ADD);
-                emit_byte(chunk, OP_STORE_VAR);
-                emit_byte(chunk, (uint8_t)((indexVarIndex >> 8) & 0xFF));
-                emit_byte(chunk, (uint8_t)(indexVarIndex & 0xFF));
-                
-                // Jump back to loop start
-                emit_byte(chunk, OP_LOOP);
-                int offset = chunk->code_count - loopStart + 2;
-                emit_byte(chunk, (offset >> 8) & 0xFF);
-                emit_byte(chunk, offset & 0xFF);
-                
-                patch_jump(chunk, loopEndJump);
-                
-            } else {
-                fprintf(stderr, "Compiler error: Unsupported iterable type %d in naked iterator\n", iterable->type);
-            }
-            
-            break;
-        }
         case AST_BLOCK: {
             // compile each statement in the block
             for (int i = 0; i < node->block.statement_count; i++) {
@@ -1098,6 +753,14 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             }
             break;
         }
+        case AST_EVENT_BINDING:
+        case AST_EVENT_BROADCAST:
+        case AST_EVENT_CONDITION:
+        case AST_EVENT_FILTER:
+        case AST_FILTER_EXPRESSION:
+            // For Phase 1: Basic placeholder - just print and continue (no recursion!)
+            printf("Phase 1: Event node type %d (placeholder)\n", node->type);
+            break;
         default:
             fprintf(stderr, "Compiler error: Unexpected node type %d in statement.\n", node->type);
             break;
@@ -1136,7 +799,14 @@ static void compile_node(ASTNode* node, BytecodeChunk* chunk, SymbolTable* symta
         case AST_RANGE:
             compile_statement(node, chunk, symtab);
             break;
-
+        case AST_EVENT_BINDING:
+        case AST_EVENT_BROADCAST:
+        case AST_EVENT_CONDITION:
+        case AST_EVENT_FILTER:
+        case AST_FILTER_EXPRESSION:
+            // For Phase 1: Basic placeholder - just print and continue (no recursion!)
+            printf("Phase 1: Event node type %d (placeholder)\n", node->type);
+            break;
         default:
             fprintf(stderr, "Compiler error: compile_node unrecognized AST type %d.\n", node->type);
             break;

@@ -1,0 +1,7 @@
+print("Testing event binding parsing...")
+
+// This should fail with parse error currently
+onPlayerJump: fn() <- ["PlayerJump"]
+  print("Player jumped!")
+
+print("Event binding parsed successfully!") 

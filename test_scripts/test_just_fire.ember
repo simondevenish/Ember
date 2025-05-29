@@ -1,0 +1,5 @@
+print("Testing just event firing...")
+
+fire["PlayerJump"]
+
+print("Event firing test complete!") 

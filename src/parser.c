@@ -229,6 +229,30 @@ void free_ast(ASTNode* node) {
             free_ast(node->naked_iterator.iterable);
             free_ast(node->naked_iterator.body);
             break;
+        case AST_EVENT_BINDING:
+            free(node->event_binding.function_name);
+            for (int i = 0; i < node->event_binding.parameter_count; i++) {
+                free(node->event_binding.parameters[i]);
+            }
+            free(node->event_binding.parameters);
+            free(node->event_binding.event_name);
+            if (node->event_binding.condition) {
+                free_ast(node->event_binding.condition);
+            }
+            if (node->event_binding.filter) {
+                free_ast(node->event_binding.filter);
+            }
+            free_ast(node->event_binding.body);
+            break;
+        case AST_EVENT_BROADCAST:
+            free(node->event_broadcast.event_name);
+            if (node->event_broadcast.condition) {
+                free_ast(node->event_broadcast.condition);
+            }
+            if (node->event_broadcast.filter) {
+                free_ast(node->event_broadcast.filter);
+            }
+            break;
         default:
             fprintf(stderr, "Error: Unknown AST node type\n");
             break;
@@ -813,6 +837,12 @@ ASTNode* parse_statement(Parser* parser) {
         return parse_import_statement(parser);
     }
 
+    // Match event broadcast (fire["EventName"])
+    if (parser->current_token.type == TOKEN_KEYWORD &&
+        strcmp(parser->current_token.value, "fire") == 0) {
+        return parse_event_broadcast(parser);
+    }
+
     // Match a block
     if (parser->current_token.type == TOKEN_PUNCTUATION &&
         strcmp(parser->current_token.value, "{") == 0) {
@@ -887,6 +917,44 @@ ASTNode* parse_statement(Parser* parser) {
             bool is_function = (parser->current_token.type == TOKEN_KEYWORD && 
                                strcmp(parser->current_token.value, "fn") == 0);
             
+            // NEW: Check for event binding syntax: fn() <- ["EventName"]
+            bool is_event_binding = false;
+            if (is_function) {
+                // Look ahead to see if this is an event binding
+                parser_advance(parser); // Skip 'fn'
+                
+                // Expect '(' for parameters
+                if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                    strcmp(parser->current_token.value, "(") == 0) {
+                    
+                    parser_advance(parser); // Skip '('
+                    
+                    // Skip parameter list (Phase 1 only supports empty params)
+                    while (parser->current_token.type != TOKEN_PUNCTUATION ||
+                           strcmp(parser->current_token.value, ")") != 0) {
+                        if (parser->current_token.type == TOKEN_EOF) {
+                            break; // Avoid infinite loop
+                        }
+                        parser_advance(parser);
+                    }
+                    
+                    if (parser->current_token.type == TOKEN_PUNCTUATION && 
+                        strcmp(parser->current_token.value, ")") == 0) {
+                        
+                        parser_advance(parser); // Skip ')'
+                        
+                        // Now check what comes after fn()
+                        if (parser->current_token.type == TOKEN_OPERATOR && 
+                            strcmp(parser->current_token.value, "<-") == 0) {
+                            // This is an event binding: fn() <- ["EventName"]
+                            is_event_binding = true;
+                            is_function = false; // Not a regular function
+                        }
+                        // If not event binding, it's still a regular function
+                    }
+                }
+            }
+            
             // Check for naked iterator pattern: identifier: range_expression followed by indented block
             bool is_naked_iterator = false;
             if (!is_function) {
@@ -954,7 +1022,9 @@ ASTNode* parse_statement(Parser* parser) {
             *parser->lexer = saved_lexer;
             parser->current_token = saved_token;
             
-            if (is_function) {
+            if (is_event_binding) {
+                return parse_event_binding(parser);
+            } else if (is_function) {
                 return parse_function_definition(parser);
             } else if (is_naked_iterator) {
                 return parse_naked_iterator(parser);
@@ -2404,9 +2474,40 @@ void print_ast(const ASTNode* node, int depth) {
             printf("  Body:\n");
             print_ast(node->naked_iterator.body, depth + 1);
             break;
-
+        case AST_EVENT_BINDING:
+            printf("Event Binding: %s\n", node->event_binding.function_name);
+            printf("  Event: %s\n", node->event_binding.event_name);
+            printf("  Parameters:\n");
+            for (int i = 0; i < node->event_binding.parameter_count; i++) {
+                for (int j = 0; j < depth + 2; j++) {
+                    printf("  ");
+                }
+                printf("%s\n", node->event_binding.parameters[i]);
+            }
+            if (node->event_binding.condition) {
+                printf("  Condition:\n");
+                print_ast(node->event_binding.condition, depth + 1);
+            }
+            if (node->event_binding.filter) {
+                printf("  Filter:\n");
+                print_ast(node->event_binding.filter, depth + 1);
+            }
+            printf("  Body:\n");
+            print_ast(node->event_binding.body, depth + 1);
+            break;
+        case AST_EVENT_BROADCAST:
+            printf("Event Broadcast: %s\n", node->event_broadcast.event_name);
+            if (node->event_broadcast.condition) {
+                printf("  Condition:\n");
+                print_ast(node->event_broadcast.condition, depth + 1);
+            }
+            if (node->event_broadcast.filter) {
+                printf("  Filter:\n");
+                print_ast(node->event_broadcast.filter, depth + 1);
+            }
+            break;
         default:
-            printf("Unknown AST Node Type\n");
+            fprintf(stderr, "Error: Unknown AST node type\n");
             break;
     }
 }
@@ -3113,4 +3214,304 @@ ASTNode* parse_function_expression(Parser* parser) {
     function_node->function_def.body = body;
 
     return function_node;
+}
+
+ASTNode* parse_event_binding(Parser* parser) {
+    // Parse event binding syntax: onPlayerJump: fn() <- ["PlayerJump"]
+    //   followed by function body
+    
+    // Expect a function name (identifier)
+    if (parser->current_token.type != TOKEN_IDENTIFIER) {
+        report_error(parser, "Expected function name for event binding");
+        return NULL;
+    }
+
+    // Capture the function name
+    char* function_name = strdup(parser->current_token.value);
+    if (!function_name) {
+        report_error(parser, "Memory allocation failed for event binding function name");
+        return NULL;
+    }
+    parser_advance(parser);
+
+    // Expect a colon ':'
+    if (!match_token(parser, TOKEN_PUNCTUATION, ":")) {
+        report_error(parser, "Expected ':' after function name in event binding");
+        free(function_name);
+        return NULL;
+    }
+
+    // Expect 'fn' keyword
+    if (!match_token(parser, TOKEN_KEYWORD, "fn")) {
+        report_error(parser, "Expected 'fn' keyword after ':' in event binding");
+        free(function_name);
+        return NULL;
+    }
+
+    // Expect an opening parenthesis '('
+    if (!match_token(parser, TOKEN_PUNCTUATION, "(")) {
+        report_error(parser, "Expected '(' after 'fn' in event binding");
+        free(function_name);
+        return NULL;
+    }
+
+    // Parse parameters (for Phase 1, we'll support empty parameter lists only)
+    char** parameters = NULL;
+    int parameter_count = 0;
+
+    // For Phase 1: only support empty parameter lists fn()
+    // Later phases can extend this to support parameters
+    while (parser->current_token.type != TOKEN_PUNCTUATION ||
+           strcmp(parser->current_token.value, ")") != 0) {
+
+        if (parser->current_token.type != TOKEN_IDENTIFIER) {
+            report_error(parser, "Expected parameter name in event binding");
+            free(function_name);
+            for (int i = 0; i < parameter_count; i++) {
+                free(parameters[i]);
+            }
+            free(parameters);
+            return NULL;
+        }
+
+        // Capture parameter name
+        char* param_name = strdup(parser->current_token.value);
+        if (!param_name) {
+            report_error(parser, "Memory allocation failed for parameter name");
+            free(function_name);
+            for (int i = 0; i < parameter_count; i++) {
+                free(parameters[i]);
+            }
+            free(parameters);
+            return NULL;
+        }
+
+        // Add parameter to list
+        char** temp = realloc(parameters, sizeof(char*) * (parameter_count + 1));
+        if (!temp) {
+            report_error(parser, "Memory allocation failed for parameters");
+            free(param_name);
+            free(function_name);
+            for (int i = 0; i < parameter_count; i++) {
+                free(parameters[i]);
+            }
+            free(parameters);
+            return NULL;
+        }
+        parameters = temp;
+        parameters[parameter_count++] = param_name;
+
+        parser_advance(parser);
+
+        // Handle comma-separated parameters
+        if (parser->current_token.type == TOKEN_PUNCTUATION &&
+            strcmp(parser->current_token.value, ",") == 0) {
+            parser_advance(parser);
+        } else if (parser->current_token.type == TOKEN_PUNCTUATION &&
+                   strcmp(parser->current_token.value, ")") == 0) {
+            break;
+        } else {
+            report_error(parser, "Expected ',' or ')' in parameter list");
+            free(function_name);
+            for (int i = 0; i < parameter_count; i++) {
+                free(parameters[i]);
+            }
+            free(parameters);
+            return NULL;
+        }
+    }
+
+    // Consume the closing parenthesis ')'
+    if (!match_token(parser, TOKEN_PUNCTUATION, ")")) {
+        report_error(parser, "Expected ')' after parameters in event binding");
+        free(function_name);
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+
+    // Expect the event binding operator '<-'
+    if (!match_token(parser, TOKEN_OPERATOR, "<-")) {
+        report_error(parser, "Expected '<-' operator for event binding");
+        free(function_name);
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+
+    // Expect opening bracket '['
+    if (!match_token(parser, TOKEN_PUNCTUATION, "[")) {
+        report_error(parser, "Expected '[' after '<-' in event binding");
+        free(function_name);
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+
+    // Parse event name (must be a string literal)
+    if (parser->current_token.type != TOKEN_STRING) {
+        report_error(parser, "Expected event name as string literal");
+        free(function_name);
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+
+    char* event_name = strdup(parser->current_token.value);
+    if (!event_name) {
+        report_error(parser, "Memory allocation failed for event name");
+        free(function_name);
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+    parser_advance(parser);
+
+    // TODO Phase 2: Parse optional condition {if condition}
+    // TODO Phase 2: Parse optional filters | filter1, filter2
+    
+    // For Phase 1: Skip to closing bracket
+    ASTNode* condition = NULL;  // Phase 1: no conditions
+    ASTNode* filter = NULL;     // Phase 1: no filters
+
+    // Expect closing bracket ']'
+    if (!match_token(parser, TOKEN_PUNCTUATION, "]")) {
+        report_error(parser, "Expected ']' to close event specification");
+        free(function_name);
+        free(event_name);
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+
+    // Skip any newlines before the function body
+    while (parser->current_token.type == TOKEN_NEWLINE) {
+        parser_advance(parser);
+    }
+
+    // Parse the function body - support both brace-based and indentation-based blocks
+    ASTNode* body = NULL;
+    if (parser->current_token.type == TOKEN_PUNCTUATION && 
+        strcmp(parser->current_token.value, "{") == 0) {
+        // Brace-based block
+        body = parse_block(parser);
+    } else if (parser->current_token.type == TOKEN_INDENT) {
+        // Indentation-based block
+        body = parse_indented_block(parser);
+    } else {
+        report_error(parser, "Expected '{' or indented block for event binding function body");
+        free(function_name);
+        free(event_name);
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+
+    if (!body) {
+        report_error(parser, "Failed to parse function body for event binding");
+        free(function_name);
+        free(event_name);
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        return NULL;
+    }
+
+    // Create the event binding AST node
+    ASTNode* event_binding_node = create_ast_node(AST_EVENT_BINDING);
+    if (!event_binding_node) {
+        report_error(parser, "Memory allocation failed for event binding node");
+        free(function_name);
+        free(event_name);
+        for (int i = 0; i < parameter_count; i++) {
+            free(parameters[i]);
+        }
+        free(parameters);
+        free_ast(body);
+        return NULL;
+    }
+
+    // Populate the event binding node
+    event_binding_node->event_binding.function_name = function_name;
+    event_binding_node->event_binding.parameters = parameters;
+    event_binding_node->event_binding.parameter_count = parameter_count;
+    event_binding_node->event_binding.event_name = event_name;
+    event_binding_node->event_binding.condition = condition;  // Phase 1: NULL
+    event_binding_node->event_binding.filter = filter;       // Phase 1: NULL
+    event_binding_node->event_binding.body = body;
+
+    return event_binding_node;
+}
+
+ASTNode* parse_event_broadcast(Parser* parser) {
+    // Parse event broadcast syntax: fire["EventName"]
+    
+    // Expect 'fire' keyword (should already be checked by caller)
+    if (!match_token(parser, TOKEN_KEYWORD, "fire")) {
+        report_error(parser, "Expected 'fire' keyword for event broadcast");
+        return NULL;
+    }
+
+    // Expect opening bracket '['
+    if (!match_token(parser, TOKEN_PUNCTUATION, "[")) {
+        report_error(parser, "Expected '[' after 'fire' in event broadcast");
+        return NULL;
+    }
+
+    // Parse event name (must be a string literal)
+    if (parser->current_token.type != TOKEN_STRING) {
+        report_error(parser, "Expected event name as string literal in event broadcast");
+        return NULL;
+    }
+
+    char* event_name = strdup(parser->current_token.value);
+    if (!event_name) {
+        report_error(parser, "Memory allocation failed for event broadcast name");
+        return NULL;
+    }
+    parser_advance(parser);
+
+    // TODO Phase 2: Parse optional condition {if condition}
+    // TODO Phase 2: Parse optional filters | filter1, filter2
+    
+    // For Phase 1: Skip to closing bracket
+    ASTNode* condition = NULL;  // Phase 1: no conditions
+    ASTNode* filter = NULL;     // Phase 1: no filters
+
+    // Expect closing bracket ']'
+    if (!match_token(parser, TOKEN_PUNCTUATION, "]")) {
+        report_error(parser, "Expected ']' to close event broadcast specification");
+        free(event_name);
+        return NULL;
+    }
+
+    // Create the event broadcast AST node
+    ASTNode* event_broadcast_node = create_ast_node(AST_EVENT_BROADCAST);
+    if (!event_broadcast_node) {
+        report_error(parser, "Memory allocation failed for event broadcast node");
+        free(event_name);
+        return NULL;
+    }
+
+    // Populate the event broadcast node
+    event_broadcast_node->event_broadcast.event_name = event_name;
+    event_broadcast_node->event_broadcast.condition = condition;  // Phase 1: NULL
+    event_broadcast_node->event_broadcast.filter = filter;       // Phase 1: NULL
+
+    return event_broadcast_node;
 }

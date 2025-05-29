@@ -267,6 +267,13 @@ Token lexer_next_token(Lexer* lexer) {
             operator[1] = '.';
             operator[2] = '\0';
             return (Token){TOKEN_OPERATOR, operator, lexer->line, lexer->column};
+        } else if (first_char == '<' && lexer->current_char == '-') { // <- (event binding operator)
+            lexer_advance(lexer);
+            char* operator = (char*)malloc(3);
+            operator[0] = '<';
+            operator[1] = '-';
+            operator[2] = '\0';
+            return (Token){TOKEN_OPERATOR, operator, lexer->line, lexer->column};
         } else {
             // Single-character operator (e.g., =, <, >, !, .)
             char* operator = (char*)malloc(2);
@@ -309,7 +316,7 @@ Token lexer_next_token(Lexer* lexer) {
 bool is_keyword(const char* identifier) {
     static const char* keywords[] = {
         "if", "else", "while", "for", "return", "break", "continue",
-        "var", "const", "let", "true", "false", "null", "import", "fn"
+        "var", "const", "let", "true", "false", "null", "import", "fn", "fire"
     };
 
     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);

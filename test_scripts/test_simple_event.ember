@@ -1,0 +1,7 @@
+// Simple Event Test
+print("Testing simple event...")
+
+// Just test event firing first
+fire["TestEvent"]
+
+print("Event fired!") 

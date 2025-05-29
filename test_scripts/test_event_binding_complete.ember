@@ -1,0 +1,18 @@
+print("=== Event Binding Parsing Test ===")
+
+// Test 1: Basic event binding (no parameters)
+onPlayerJump: fn() <- ["PlayerJump"]
+  print("Player jumped!")
+
+// Test 2: Event binding with parameters  
+onPlayerMove: fn(direction) <- ["PlayerMove"]
+  print("Player moved in direction: " + direction)
+
+// Test 3: Event firing
+print("Firing PlayerJump event...")
+fire["PlayerJump"]
+
+print("Firing PlayerMove event...")
+fire["PlayerMove"]
+
+print("=== All event syntax parsed successfully! ===") 

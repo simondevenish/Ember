@@ -876,73 +876,155 @@ static void compile_statement(ASTNode* node, BytecodeChunk* chunk, SymbolTable* 
             break;
         }
         case AST_NAKED_ITERATOR: {
-            // Naked iterator: var: start..end (body)
-            // Compile as: var = start; while (var <= end) { body; var++; }
+            // Naked iterator: var: iterable (body)
+            // Support different types:
+            // - Range: var: start..end
+            // - Array: var: array_var  
+            // - Variable: var: collection_var
             
-            // 1. Get the range start and end values
-            ASTNode* range = node->naked_iterator.range;
+            ASTNode* iterable = node->naked_iterator.iterable;
             char* var_name = node->naked_iterator.variable_name;
             
-            // 2. Initialize the iterator variable to the start value
-            // var = range.start
-            compile_expression(range->range.start, chunk, symtab);
-            int varIndex = symbol_table_get_or_add(symtab, var_name, false);
-            emit_byte(chunk, OP_STORE_VAR);
-            emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
-            emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
-            
-            // 3. Store the end value in a temporary variable (recompute each time for now)
-            // We'll compare against range.end each iteration
-            
-            // 4. Loop start label
-            int loopStart = chunk->code_count;
-            
-            // 5. Loop condition: var <= end
-            // Load current variable value
-            emit_byte(chunk, OP_LOAD_VAR);
-            emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
-            emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
-            
-            // Load end value
-            compile_expression(range->range.end, chunk, symtab);
-            
-            // Compare: var <= end
-            emit_byte(chunk, OP_LTE);
-            
-            // Jump if false (end loop)
-            int loopEndJump = emit_jump(chunk, OP_JUMP_IF_FALSE);
-            
-            // 6. Compile loop body
-            compile_node(node->naked_iterator.body, chunk, symtab);
-            
-            // 7. Increment the iterator variable: var = var + 1
-            // Load current variable value
-            emit_byte(chunk, OP_LOAD_VAR);
-            emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
-            emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
-            
-            // Load constant 1
-            RuntimeValue one;
-            one.type = RUNTIME_VALUE_NUMBER;
-            one.number_value = 1.0;
-            emit_constant(chunk, one);
-            
-            // Add: var + 1
-            emit_byte(chunk, OP_ADD);
-            
-            // Store back to variable
-            emit_byte(chunk, OP_STORE_VAR);
-            emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
-            emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
-            
-            // 8. Jump back to loop start
-            emit_byte(chunk, OP_LOOP);
-            int offset = chunk->code_count - loopStart + 2;
-            emit_byte(chunk, (offset >> 8) & 0xFF);
-            emit_byte(chunk, offset & 0xFF);
-            
-            // 9. Patch the end jump
-            patch_jump(chunk, loopEndJump);
+            if (iterable->type == AST_RANGE) {
+                // Range iteration: var = start; while (var <= end) { body; var++; }
+                
+                // Initialize the iterator variable to the start value
+                compile_expression(iterable->range.start, chunk, symtab);
+                int varIndex = symbol_table_get_or_add(symtab, var_name, false);
+                emit_byte(chunk, OP_STORE_VAR);
+                emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
+                emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
+                
+                // Loop start label
+                int loopStart = chunk->code_count;
+                
+                // Loop condition: var <= end
+                emit_byte(chunk, OP_LOAD_VAR);
+                emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
+                emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
+                
+                compile_expression(iterable->range.end, chunk, symtab);
+                emit_byte(chunk, OP_LTE);
+                
+                int loopEndJump = emit_jump(chunk, OP_JUMP_IF_FALSE);
+                
+                // Compile loop body
+                compile_node(node->naked_iterator.body, chunk, symtab);
+                
+                // Increment: var = var + 1
+                emit_byte(chunk, OP_LOAD_VAR);
+                emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
+                emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
+                
+                RuntimeValue one;
+                one.type = RUNTIME_VALUE_NUMBER;
+                one.number_value = 1.0;
+                emit_constant(chunk, one);
+                
+                emit_byte(chunk, OP_ADD);
+                emit_byte(chunk, OP_STORE_VAR);
+                emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
+                emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
+                
+                // Jump back to loop start
+                emit_byte(chunk, OP_LOOP);
+                int offset = chunk->code_count - loopStart + 2;
+                emit_byte(chunk, (offset >> 8) & 0xFF);
+                emit_byte(chunk, offset & 0xFF);
+                
+                patch_jump(chunk, loopEndJump);
+                
+            } else if (iterable->type == AST_VARIABLE || 
+                       iterable->type == AST_ARRAY_LITERAL ||
+                       iterable->type == AST_PROPERTY_ACCESS) {
+                // Collection iteration: index = 0; while (index < collection.length) { var = collection[index]; body; index++; }
+                
+                // Create a temporary index variable
+                char index_var_name[64];
+                snprintf(index_var_name, sizeof(index_var_name), "__iter_index_%p", (void*)node);
+                int indexVarIndex = symbol_table_get_or_add(symtab, index_var_name, false);
+                
+                // Initialize index to 0
+                RuntimeValue zero;
+                zero.type = RUNTIME_VALUE_NUMBER;
+                zero.number_value = 0.0;
+                emit_constant(chunk, zero);
+                emit_byte(chunk, OP_STORE_VAR);
+                emit_byte(chunk, (uint8_t)((indexVarIndex >> 8) & 0xFF));
+                emit_byte(chunk, (uint8_t)(indexVarIndex & 0xFF));
+                
+                // Loop start label
+                int loopStart = chunk->code_count;
+                
+                // Loop condition: index < collection.length
+                emit_byte(chunk, OP_LOAD_VAR);
+                emit_byte(chunk, (uint8_t)((indexVarIndex >> 8) & 0xFF));
+                emit_byte(chunk, (uint8_t)(indexVarIndex & 0xFF));
+                
+                // Get collection length - different approaches for different types
+                if (iterable->type == AST_ARRAY_LITERAL) {
+                    // For array literals, we know the length at compile time
+                    RuntimeValue length;
+                    length.type = RUNTIME_VALUE_NUMBER;
+                    length.number_value = (double)iterable->array_literal.element_count;
+                    emit_constant(chunk, length);
+                } else {
+                    // For variables and property access, get length at runtime
+                    // Load the collection and get its length
+                    compile_expression(iterable, chunk, symtab);
+                    emit_byte(chunk, OP_GET_LENGTH);
+                }
+                
+                emit_byte(chunk, OP_LT);
+                int loopEndJump = emit_jump(chunk, OP_JUMP_IF_FALSE);
+                
+                // Set iterator variable: var = collection[index]
+                // Load collection
+                compile_expression(iterable, chunk, symtab);
+                
+                // Load index
+                emit_byte(chunk, OP_LOAD_VAR);
+                emit_byte(chunk, (uint8_t)((indexVarIndex >> 8) & 0xFF));
+                emit_byte(chunk, (uint8_t)(indexVarIndex & 0xFF));
+                
+                // Get element: collection[index]
+                emit_byte(chunk, OP_GET_INDEX);
+                
+                // Store in iterator variable
+                int varIndex = symbol_table_get_or_add(symtab, var_name, false);
+                emit_byte(chunk, OP_STORE_VAR);
+                emit_byte(chunk, (uint8_t)((varIndex >> 8) & 0xFF));
+                emit_byte(chunk, (uint8_t)(varIndex & 0xFF));
+                
+                // Compile loop body
+                compile_node(node->naked_iterator.body, chunk, symtab);
+                
+                // Increment index: index = index + 1
+                emit_byte(chunk, OP_LOAD_VAR);
+                emit_byte(chunk, (uint8_t)((indexVarIndex >> 8) & 0xFF));
+                emit_byte(chunk, (uint8_t)(indexVarIndex & 0xFF));
+                
+                RuntimeValue one;
+                one.type = RUNTIME_VALUE_NUMBER;
+                one.number_value = 1.0;
+                emit_constant(chunk, one);
+                
+                emit_byte(chunk, OP_ADD);
+                emit_byte(chunk, OP_STORE_VAR);
+                emit_byte(chunk, (uint8_t)((indexVarIndex >> 8) & 0xFF));
+                emit_byte(chunk, (uint8_t)(indexVarIndex & 0xFF));
+                
+                // Jump back to loop start
+                emit_byte(chunk, OP_LOOP);
+                int offset = chunk->code_count - loopStart + 2;
+                emit_byte(chunk, (offset >> 8) & 0xFF);
+                emit_byte(chunk, offset & 0xFF);
+                
+                patch_jump(chunk, loopEndJump);
+                
+            } else {
+                fprintf(stderr, "Compiler error: Unsupported iterable type %d in naked iterator\n", iterable->type);
+            }
             
             break;
         }

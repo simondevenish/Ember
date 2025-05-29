@@ -226,7 +226,7 @@ void free_ast(ASTNode* node) {
             break;
         case AST_NAKED_ITERATOR:
             free(node->naked_iterator.variable_name);
-            free_ast(node->naked_iterator.range);
+            free_ast(node->naked_iterator.iterable);
             free_ast(node->naked_iterator.body);
             break;
         default:
@@ -2072,19 +2072,22 @@ ASTNode* parse_naked_iterator(Parser* parser) {
     }
     parser_advance(parser); // Skip the ':'
 
-    // Parse the range expression
-    ASTNode* range_expr = parse_expression(parser, 0);
-    if (!range_expr) {
-        report_error(parser, "Failed to parse range expression for naked iterator");
+    // Parse the iterable expression (range, array, or variable)
+    ASTNode* iterable_expr = parse_expression(parser, 0);
+    if (!iterable_expr) {
+        report_error(parser, "Failed to parse iterable expression for naked iterator");
         free(variable_name);
         return NULL;
     }
 
-    // Verify that the expression is actually a range
-    if (range_expr->type != AST_RANGE) {
-        report_error(parser, "Expected range expression (e.g., 0..5) for naked iterator");
+    // Verify that the expression is a valid iterable (range, variable, array, etc.)
+    if (iterable_expr->type != AST_RANGE && 
+        iterable_expr->type != AST_VARIABLE && 
+        iterable_expr->type != AST_ARRAY_LITERAL &&
+        iterable_expr->type != AST_PROPERTY_ACCESS) {
+        report_error(parser, "Expected range expression (e.g., 0..5), array, or variable for naked iterator");
         free(variable_name);
-        free_ast(range_expr);
+        free_ast(iterable_expr);
         return NULL;
     }
 
@@ -2098,7 +2101,7 @@ ASTNode* parse_naked_iterator(Parser* parser) {
     if (!body) {
         report_error(parser, "Failed to parse indented body for naked iterator");
         free(variable_name);
-        free_ast(range_expr);
+        free_ast(iterable_expr);
         return NULL;
     }
 
@@ -2107,13 +2110,13 @@ ASTNode* parse_naked_iterator(Parser* parser) {
     if (!naked_iterator_node) {
         report_error(parser, "Memory allocation failed for naked iterator node");
         free(variable_name);
-        free_ast(range_expr);
+        free_ast(iterable_expr);
         free_ast(body);
         return NULL;
     }
 
     naked_iterator_node->naked_iterator.variable_name = variable_name;
-    naked_iterator_node->naked_iterator.range = range_expr;
+    naked_iterator_node->naked_iterator.iterable = iterable_expr;
     naked_iterator_node->naked_iterator.body = body;
 
     return naked_iterator_node;
@@ -2372,7 +2375,7 @@ void print_ast(const ASTNode* node, int depth) {
         case AST_NAKED_ITERATOR:
             printf("Naked Iterator: %s\n", node->naked_iterator.variable_name);
             printf("  Range:\n");
-            print_ast(node->naked_iterator.range, depth + 1);
+            print_ast(node->naked_iterator.iterable, depth + 1);
             printf("  Body:\n");
             print_ast(node->naked_iterator.body, depth + 1);
             break;

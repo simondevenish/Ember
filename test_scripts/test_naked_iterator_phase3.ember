@@ -1,0 +1,52 @@
+// Phase 3: Collection-based Naked Iterator Implementation Test
+// This test validates that naked iterators work correctly with arrays and objects
+
+print("=== EmberScript Collection-based Naked Iterator Test ===")
+
+// Test 1: Array iteration
+print("\n1. Array iteration:")
+var fruits: ["apple", "banana", "cherry"]
+item: fruits
+  print("  Processing item: " + item)
+
+// Test 2: Array with numbers
+print("\n2. Number array iteration:")
+var numbers: [10, 20, 30, 40]
+num: numbers
+  print("  Number: " + num)
+
+// Test 3: Object key iteration
+print("\n3. Object key iteration:")
+var person: {name: "Alice", age: 30, city: "New York"}
+key: person
+  print("  Key: " + key + ", Value: " + person[key])
+
+// Test 4: Empty array
+print("\n4. Empty array iteration:")
+var empty: []
+x: empty
+  print("  This should not print: " + x)
+print("  Empty array iteration complete")
+
+// Test 5: Mixed type array
+print("\n5. Mixed type array:")
+var mixed: [42, "hello", true, null]
+element: mixed
+  print("  Element: " + element)
+
+// Test 6: Nested array iteration
+print("\n6. Nested array iteration:")
+var matrix: [[1, 2], [3, 4], [5, 6]]
+row: matrix
+  print("  Row: " + row)
+
+// Test 7: Collection iteration with multiple statements
+print("\n7. Multiple statements in collection iteration:")
+var colors: ["red", "green", "blue"]
+color: colors
+  print("  Processing color: " + color)
+  var uppercase: color  // Note: would need string methods for real uppercase
+  print("  Color processed: " + uppercase)
+
+print("\n=== All Collection-based Naked Iterator Tests Complete! ===")
+print("Phase 3 (Collection-based Iterators) is ready for testing.") 

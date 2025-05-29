@@ -71,7 +71,7 @@ typedef struct ASTNode {
         struct { struct ASTNode* object; char* method; struct ASTNode** arguments; int argument_count; } method_call; // For AST_METHOD_CALL
         struct { struct ASTNode* object; char* property; struct ASTNode* value; } property_assignment; // For AST_PROPERTY_ASSIGNMENT
         struct { struct ASTNode* start; struct ASTNode* end; } range; // For AST_RANGE: start..end
-        struct { char* variable_name; struct ASTNode* range; struct ASTNode* body; } naked_iterator; // For AST_NAKED_ITERATOR: var: range (body)
+        struct { char* variable_name; struct ASTNode* iterable; struct ASTNode* body; } naked_iterator; // For AST_NAKED_ITERATOR: var: iterable (body)
     };
 } ASTNode;
 

@@ -714,6 +714,7 @@ int vm_run(VM* vm) {
             case OP_PRINT: instruction_name = "OP_PRINT"; break;
             case OP_COPY_PROPERTIES: instruction_name = "OP_COPY_PROPERTIES"; break;
             case OP_CALL_METHOD: instruction_name = "OP_CALL_METHOD"; break;
+            case OP_GET_LENGTH: instruction_name = "OP_GET_LENGTH"; break;
             default: break;
         }
         
@@ -1361,6 +1362,27 @@ int vm_run(VM* vm) {
                 // Retrieve element
                 RuntimeValue element = arrVal.array_value.elements[idx];
                 vm_push(vm, element);
+                break;
+            }
+
+            case OP_GET_LENGTH: {
+                // Get length of array or object
+                RuntimeValue val = vm_pop(vm);
+                RuntimeValue result;
+                result.type = RUNTIME_VALUE_NUMBER;
+                
+                if (val.type == RUNTIME_VALUE_ARRAY) {
+                    result.number_value = (double)val.array_value.count;
+                } else if (val.type == RUNTIME_VALUE_OBJECT) {
+                    result.number_value = (double)val.object_value.count;
+                } else if (val.type == RUNTIME_VALUE_STRING) {
+                    result.number_value = (double)strlen(val.string_value);
+                } else {
+                    fprintf(stderr, "VM Error: OP_GET_LENGTH on unsupported type %d.\n", val.type);
+                    return 1;
+                }
+                
+                vm_push(vm, result);
                 break;
             }
 

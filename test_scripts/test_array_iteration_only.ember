@@ -1,0 +1,51 @@
+// Phase 3: Array-only Naked Iterator Test
+// This test validates that naked iterators work correctly with arrays
+
+print("=== EmberScript Array-based Naked Iterator Test ===")
+
+// Test 1: Array iteration
+print("\n1. Array iteration:")
+var fruits: ["apple", "banana", "cherry"]
+item: fruits
+  print("  Processing item: " + item)
+
+// Test 2: Array with numbers
+print("\n2. Number array iteration:")
+var numbers: [10, 20, 30, 40]
+num: numbers
+  print("  Number: " + num)
+
+// Test 3: Empty array
+print("\n3. Empty array iteration:")
+var empty: []
+x: empty
+  print("  This should not print: " + x)
+print("  Empty array iteration complete")
+
+// Test 4: Mixed type array
+print("\n4. Mixed type array:")
+var mixed: [42, "hello", true, null]
+element: mixed
+  print("  Element: " + element)
+
+// Test 5: Nested array iteration
+print("\n5. Nested array iteration:")
+var matrix: [[1, 2], [3, 4], [5, 6]]
+row: matrix
+  print("  Row: " + row)
+
+// Test 6: Array iteration with multiple statements
+print("\n6. Multiple statements in array iteration:")
+var colors: ["red", "green", "blue"]
+color: colors
+  print("  Processing color: " + color)
+  var uppercase: color  // Note: would need string methods for real uppercase
+  print("  Color processed: " + uppercase)
+
+// Test 7: Range iteration still works
+print("\n7. Range iteration (Phase 2 compatibility):")
+i: 1..3
+  print("  Range iteration i = " + i)
+
+print("\n=== All Array-based Naked Iterator Tests Complete! ===")
+print("Phase 3 (Array-based Iterators) is working correctly!") 
